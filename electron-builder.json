@@ -1,0 +1,13 @@
+{
+  "appId": "com.my-electron-app",
+  "productName": "My Electron App",
+  "icon": "src/assets/favicon.ico",
+  "files": [
+    "dist-react/**/*",
+    "dist-electron/**/*",
+    "dist-ssr/**/*",
+    "package.json"
+  ],
+  "extraResources": ["dist-electron/preload.cjs"],
+  "win": { "target": ["msi", "portable"] }
+}
