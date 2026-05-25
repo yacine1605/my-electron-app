@@ -91,3 +91,25 @@ export const useDeleteSupplier = () => {
     },
   });
 };
+export const updateSupplierSchema = createSupplierSchema.partial().extend({
+  id: z.string(),
+});
+
+export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
+
+export const useUpdateSupplier = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...data }: UpdateSupplierInput) =>
+      api.put<Supplier>(`suppliers/${id}`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      queryClient.invalidateQueries({ queryKey: ["suppliers", variables.id] });
+      toast.success("Fournisseur mis à jour");
+    },
+    onError: (error: Error) => {
+      toast.error(error?.message || "Erreur lors de la mise à jour");
+    },
+  });
+};

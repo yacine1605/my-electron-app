@@ -111,7 +111,7 @@ export const AddProductDialog = () => {
           <Plus className="h-4 w-4" /> Ajouter Produit
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-145 max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-145 max-h-[90vh] overflow-y-auto bg-white">
         <DialogHeader>
           <DialogTitle>Nouveau Produit</DialogTitle>
         </DialogHeader>
@@ -127,7 +127,7 @@ export const AddProductDialog = () => {
               <SelectTrigger>
                 <SelectValue placeholder="Sélectionner un fournisseur" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white">
                 {suppliers?.map((supplier) => (
                   <SelectItem key={supplier.id} value={supplier.id}>
                     {supplier.name}

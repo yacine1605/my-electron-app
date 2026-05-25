@@ -1,112 +1,119 @@
+// table/columns.tsx
+import { Supplier } from "@/electron/types/supplier";
 import { ColumnDef } from "@tanstack/react-table";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ArrowUpDown, MoreHorizontal, Pencil, Trash2, Eye } from "lucide-react";
-import { Star } from "lucide-react";
-import { Supplier } from "@/lib/hooks/useSuppliers";
+// ─── Type Badge ───────────────────────────────────────────────────────────────
 
-// --- Star Rating Component ---
-const StarRating = ({ rating }: { rating: number | null | undefined }) => {
-  if (rating == null) return <span className="text-muted-foreground">—</span>;
+const TYPE_CONFIG: Record<string, { label: string; className: string }> = {
+  ANTISEPTIQUE: {
+    label: "Antiseptique",
+    className:
+      "bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:border-blue-800",
+  },
+  INSTRUMENTATION: {
+    label: "Instrumentation",
+    className:
+      "bg-green-50 text-green-800 border border-green-200 dark:bg-green-950 dark:text-green-200 dark:border-green-800",
+  },
+};
 
+const TypeBadge = ({ type }: { type: string }) => {
+  const config = TYPE_CONFIG[type];
+  if (!config) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs border border-border text-muted-foreground">
+        {type}
+      </span>
+    );
+  }
   return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={star}
-          className={`h-3.5 w-3.5 ${
-            star <= rating
-              ? "fill-yellow-400 text-yellow-400"
-              : "text-muted-foreground/30"
-          }`}
-        />
-      ))}
-      <span className="ml-1 text-xs text-muted-foreground">{rating}</span>
-    </div>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${config.className}`}
+    >
+      {config.label}
+    </span>
   );
 };
 
-// --- Business Type Badge Colors ---
-const businessTypeColors: Record<string, string> = {
-  Matériaux: "bg-blue-100 text-blue-700",
-  Équipements: "bg-purple-100 text-purple-700",
-  Services: "bg-green-100 text-green-700",
-  Transport: "bg-orange-100 text-orange-700",
-  Technologie: "bg-cyan-100 text-cyan-700",
-  "Sous-traitance": "bg-pink-100 text-pink-700", // 👈 quotes required
+// ─── Star Rating ──────────────────────────────────────────────────────────────
+
+const StarRating = ({ value, max = 5 }: { value: number; max?: number }) => (
+  <div className="flex items-center gap-0.5">
+    {Array.from({ length: max }, (_, i) => (
+      <span
+        key={i}
+        className={`text-xs ${
+          i < value ? "text-amber-500" : "text-muted-foreground/30"
+        }`}
+      >
+        ★
+      </span>
+    ))}
+  </div>
+);
+
+// ─── Status Dot ───────────────────────────────────────────────────────────────
+
+const StatusDot = ({ status }: { status: string }) => {
+  const isActive = status?.toLowerCase() === "actif";
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span
+        className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${
+          isActive ? "bg-emerald-500" : "bg-muted-foreground/40"
+        }`}
+      />
+      {status}
+    </span>
+  );
 };
+
+// ─── Dash ─────────────────────────────────────────────────────────────────────
+
+const Dash = () => <span className="text-muted-foreground/40">—</span>;
+
+// ─── Column Definitions ───────────────────────────────────────────────────────
 
 export const supplierColumns: ColumnDef<Supplier>[] = [
   {
     accessorKey: "name",
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        className="-ml-4"
-      >
-        Nom
-        <ArrowUpDown className="ml-2 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => (
-      <div className="font-medium">{row.getValue("name")}</div>
+    header: "Nom",
+    size: 200,
+    enableSorting: true,
+    cell: ({ getValue }) => (
+      <span className="font-medium text-sm">{getValue<string>()}</span>
     ),
   },
   {
     accessorKey: "businessType",
     header: "Type",
-    cell: ({ row }) => {
-      const type = row.getValue("businessType") as string | null;
-      if (!type) return <span className="text-muted-foreground">—</span>;
-      const colorClass =
-        businessTypeColors[type] || "bg-gray-100 text-gray-700";
-      return <Badge className={`${colorClass} border-0`}>{type}</Badge>;
-    },
-    filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id));
-    },
+    size: 160,
+    enableSorting: true,
+    cell: ({ getValue }) => <TypeBadge type={getValue<string>()} />,
   },
   {
     accessorKey: "city",
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        className="-ml-4"
-      >
-        Ville
-        <ArrowUpDown className="ml-2 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => {
-      const city = row.getValue("city") as string | null;
-      const country = row.original.country;
-      return (
-        <span className="text-muted-foreground">
-          {city || "—"}
-          {country ? `, ${country}` : ""}
-        </span>
-      );
+    header: "Ville",
+    size: 100,
+    enableSorting: false,
+    cell: ({ getValue }) => {
+      const v = getValue<string>();
+      return v ? <span className="text-sm">{v}</span> : <Dash />;
     },
   },
   {
     accessorKey: "email",
     header: "Email",
-    cell: ({ row }) => {
-      const email = row.getValue("email") as string | null;
-      if (!email) return <span className="text-muted-foreground">—</span>;
+    size: 210,
+    enableSorting: false,
+    cell: ({ getValue }) => {
+      const email = getValue<string>();
+      if (!email || email === "contacter par telephone") return <Dash />;
       return (
         <a
           href={`mailto:${email}`}
-          className="text-blue-600 hover:underline truncate block max-w-45"
+          className="text-sm text-blue-600 hover:underline dark:text-blue-400 truncate block max-w-47.5"
+          title={email}
         >
           {email}
         </a>
@@ -116,81 +123,27 @@ export const supplierColumns: ColumnDef<Supplier>[] = [
   {
     accessorKey: "phone",
     header: "Téléphone",
-    cell: ({ row }) => {
-      const phone = row.getValue("phone") as string | null;
-      if (!phone) return <span className="text-muted-foreground">—</span>;
-      return <span>{phone}</span>;
-    },
-  },
-  {
-    accessorKey: "contactPerson",
-    header: "Contact",
-    cell: ({ row }) => {
-      const contact = row.getValue("contactPerson") as string | null;
-      return (
-        <span className={contact ? "" : "text-muted-foreground"}>
-          {contact || "—"}
-        </span>
-      );
+    size: 130,
+    enableSorting: false,
+    cell: ({ getValue }) => {
+      const v = getValue<string>();
+      return v ? <span className="text-sm tabular-nums">{v}</span> : <Dash />;
     },
   },
   {
     accessorKey: "rating",
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        className="-ml-4"
-      >
-        Note
-        <ArrowUpDown className="ml-2 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => <StarRating rating={row.getValue("rating")} />,
+    header: "Note",
+    size: 100,
+    enableSorting: true,
+    cell: ({ getValue }) => <StarRating value={getValue<number>() ?? 0} />,
   },
   {
     accessorKey: "isActive",
     header: "Statut",
-    cell: ({ row }) => {
-      const isActive = row.getValue("isActive") as boolean;
-      return (
-        <Badge variant={isActive ? "default" : "secondary"}>
-          {isActive ? "Actif" : "Inactif"}
-        </Badge>
-      );
-    },
-    filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id));
-    },
-  },
-  {
-    id: "actions",
-    header: "",
-    cell: () => {
-      //{ row }
-      //  const supplier = row.original;
-
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Ouvrir menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem className="gap-2">
-              <Eye className="h-4 w-4" /> Voir détails
-            </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2">
-              <Pencil className="h-4 w-4" /> Modifier
-            </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive">
-              <Trash2 className="h-4 w-4" /> Supprimer
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    },
+    size: 100,
+    enableSorting: true,
+    cell: ({ getValue }) => (
+      <StatusDot status={getValue<boolean>() ? "Actif" : "Inactif"} />
+    ),
   },
 ];

@@ -13,6 +13,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   CreateSupplierInput,
   useCreateSupplier,
   createSupplierSchema,
@@ -23,9 +30,24 @@ const initialForm: CreateSupplierInput = {
   email: "",
   phone: "",
   city: "",
+  businessType: "",
 };
 
-export const AddSupplierDialog = () => {
+// Catégories médicales courantes
+const BUSINESS_TYPES = [
+  { value: "equipement_medical", label: "Équipement médical" },
+  { value: "dispositifs_medicaux", label: "Dispositifs médicaux" },
+  { value: "consommables", label: "Consommables médicaux" },
+  { value: "medicaments", label: "Médicaments" },
+  { value: "laboratoire", label: "Laboratoire & réactifs" },
+  { value: "imagerie", label: "Imagerie médicale" },
+  { value: "orthopedie", label: "Orthopédie" },
+  { value: "fournitures_hospitalieres", label: "Fournitures hospitalières" },
+  { value: "maintenance", label: "Maintenance technique" },
+  { value: "autre", label: "Autre" },
+];
+
+export const AddSupplierDialog = ({ name }: { name: string }) => {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<CreateSupplierInput>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,7 +68,6 @@ export const AddSupplierDialog = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate with Zod — same schema as backend
     const result = createSupplierSchema.safeParse(form);
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -69,28 +90,51 @@ export const AddSupplierDialog = () => {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger asChild className="bg-white">
         <Button className="gap-2">
-          <Plus className="h-4 w-4" /> Ajouter Fournisseur
+          <Plus className="h-4 w-4" /> Ajouter {name}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-lg bg-white">
         <DialogHeader>
-          <DialogTitle>Nouveau Fournisseur</DialogTitle>
+          <DialogTitle>Nouveau {name}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        <form onSubmit={handleSubmit} className="space-y-4 py-4 bg-white">
           {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Nom *</Label>
             <Input
               id="name"
-              placeholder="Nom du fournisseur"
+              placeholder={`Nom du ${name}`}
               value={form.name}
               onChange={(e) => handleChange("name", e.target.value)}
             />
             {errors.name && (
               <p className="text-sm text-destructive">{errors.name}</p>
+            )}
+          </div>
+
+          {/* Business Type (Catégorie) */}
+          <div className="space-y-2 bg-white">
+            <Label htmlFor="businessType">Catégorie</Label>
+            <Select
+              value={form.businessType ?? ""}
+              onValueChange={(value) => handleChange("businessType", value)}
+            >
+              <SelectTrigger id="businessType">
+                <SelectValue placeholder="Sélectionner une catégorie..." />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                {BUSINESS_TYPES.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.businessType && (
+              <p className="text-sm text-destructive">{errors.businessType}</p>
             )}
           </div>
 

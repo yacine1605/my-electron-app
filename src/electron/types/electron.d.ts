@@ -1,21 +1,38 @@
-export interface ElectronAPI {
-  window: {
-    minimize: () => Promise<void>;
-    maximize: () => Promise<void>;
-    close: () => Promise<void>;
-  };
-  dialog: {
-    openFile: (
-      filters?: { name: string; extensions: string[] }[],
-    ) => Promise<Electron.OpenDialogReturnValue>;
-    saveFile: (defaultName?: string) => Promise<Electron.SaveDialogReturnValue>;
-  };
-  on: (channel: string, callback: (...args: unknown[]) => void) => void;
-  off: (channel: string, callback: (...args: unknown[]) => void) => void;
-}
+export {};
+
+type FileFilter = {
+  name: string;
+  extensions: string[];
+};
+
+type OpenDialogReturnValue = {
+  canceled: boolean;
+  filePaths: string[];
+};
+
+type SaveDialogReturnValue = {
+  canceled: boolean;
+  filePath?: string;
+};
 
 declare global {
   interface Window {
-    electronAPI: ElectronAPI;
+    electronAPI: {
+      window: {
+        minimize: () => Promise<void>;
+        maximize: () => Promise<void>;
+        close: () => Promise<void>;
+      };
+
+      dialog: {
+        openFile: (
+          filters?: FileFilter[],
+        ) => Promise<OpenDialogReturnValue | null>;
+
+        saveFile: (
+          defaultName?: string,
+        ) => Promise<SaveDialogReturnValue | null>;
+      };
+    };
   }
 }

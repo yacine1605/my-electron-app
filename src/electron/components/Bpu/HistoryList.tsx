@@ -10,7 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 // Définir l'URL de l'API locale
-const API_URL = "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_BASE_URL; // e.g. "http://localhost:3001" ou "" si proxy
 
 const HistoryList = () => {
   const [history, setHistory] = useState<any[]>([]); // Remplacez any par votre type BpuDocument

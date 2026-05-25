@@ -2,6 +2,10 @@ export interface Supplier {
   isActive: any;
   id: string;
   name: string;
+  registrationNumber: string;
+  paymentTerms: string;
+  contactPerson: string;
+  businessType: string;
   contactName: string;
   email: string;
   phone: string;

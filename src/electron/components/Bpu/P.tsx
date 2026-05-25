@@ -1,521 +1,252 @@
-import * as React from "react";
-import { Badge } from "@/components/ui/badge";
+import { useState, useMemo } from "react";
+import { Link } from "react-router";
+import { Search, Plus, Building2, Users, Clock } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Slider } from "@/components/ui/slider";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Check,
-  Edit3,
-  FilePlus2,
-  Files,
-  Maximize2,
-  Paperclip,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { OfferStatus, OfferSummary, useOffers } from "@/lib/hooks/Useoffers";
 
-// If you don't already have a cn utility:
-function cn(...classes: (string | false | null | undefined)[]) {
-  return classes.filter(Boolean).join(" ");
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Status
+// ─────────────────────────────────────────────────────────────────────────────
 
-type CampaignStatus = "DRAFT" | "SENDING" | "SENT";
-
-type Campaign = {
-  id: string;
-  name: string;
-  org: string;
-  status: CampaignStatus;
-  eta?: string;
-};
-
-type Product = {
-  id: string;
-  title: string;
-  qty: number;
-  keys?: string;
-  details?: string;
-  conformity?: number;
-};
-
-const campaigns: Campaign[] = [
+const STATUS_CONFIG: Record<OfferStatus, { label: string; className: string }> =
   {
-    id: "cmp-108",
-    name: "CAMP 108",
-    org: "—",
-    status: "DRAFT",
-  },
-  {
-    id: "cmp-109",
-    name: "CAMP 109",
-    org: "CHU BAB EL OUED",
-    status: "SENDING",
-    eta: "Dans 11j 12h 10m",
-  },
-  {
-    id: "cmp-112",
-    name: "CAMP 112",
-    org: "chu bab el oued",
-    status: "SENDING",
-  },
-  {
-    id: "cmp-114",
-    name: "CAMP 114",
-    org: "chu belhadj setif",
-    status: "SENDING",
-  },
-  {
-    id: "cmp-115",
-    name: "CAMP 115",
-    org: "uiui",
-    status: "DRAFT",
-  },
-];
+    draft: {
+      label: "Brouillon",
+      className: "bg-gray-100 text-gray-600 border-gray-200",
+    },
+    pending: {
+      label: "En attente",
+      className: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    },
+    sent: {
+      label: "Envoyée",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    },
+    partial_failed: {
+      label: "Partiel",
+      className: "bg-orange-50 text-orange-700 border-orange-200",
+    },
+    failed: {
+      label: "Échouée",
+      className: "bg-red-50 text-red-700 border-red-200",
+    },
+    completed: {
+      // ← ADD THIS
+      label: "Terminée",
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    },
+  };
 
-const requestedProducts: Product[] = [
-  {
-    id: "p-1",
-    title: "MASQUE D’ANESTHESIE FACIAL…",
-    qty: 10,
-    keys: "Caractéristiques: 4",
-    details: "Clés: Details",
-  },
-  {
-    id: "p-2",
-    title: "MASQUE D’ANESTHESIE FACI…",
-    qty: 10,
-    keys: "Caractéristiques: 4",
-    details: "Clés: Details",
-  },
-  {
-    id: "p-3",
-    title: "MASQUE D’ANESTHESIE…",
-    qty: 10,
-    keys: "Caractéristiques: 4",
-    details: "Clés: Details",
-  },
-];
-
-const extractedExample: Product = {
-  id: "e-1",
-  title: "MASQUE D’ANESTHESIE FACIAL AVEC CONTOUR GONFLABLE TRANSPARENT N°3",
-  qty: 10,
-  details: "Fichier: Lot 02.pdf • Cliquer pour afficher le détail complet",
-  conformity: 53,
-};
-
-export default function CampaignsPage() {
-  const [searchCampaign, setSearchCampaign] = React.useState("");
-  const [activeTab, setActiveTab] = React.useState("extraction");
-  const [analysisType, setAnalysisType] = React.useState<string>("Mixte");
-  const [structure, setStructure] = React.useState<string[]>(["Auto"]);
-  const [threshold, setThreshold] = React.useState<number>(20);
-
-  const filteredCampaigns = React.useMemo(() => {
-    const q = searchCampaign.trim().toLowerCase();
-    if (!q) return campaigns;
-    return campaigns.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) || c.org.toLowerCase().includes(q),
-    );
-  }, [searchCampaign]);
+function StatusBadge({ status }: { status: OfferStatus }) {
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
 
   return (
-    <div className="w-full h-dvh bg-background text-foreground">
-      <div className="h-full grid grid-cols-[300px,1fr,360px] gap-4 p-4">
-        {/* Left: Campaigns */}
-        <aside className="rounded-xl border bg-card">
-          <div className="p-3 pb-2">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-base font-semibold">Campaigns</div>
-              <Button size="icon" variant="outline" className="h-7 w-7">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative w-full">
-                <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchCampaign}
-                  onChange={(e) => setSearchCampaign(e.target.value)}
-                  placeholder="Search campaigns"
-                  className="pl-8 h-8 text-sm"
-                />
-              </div>
-            </div>
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cfg.className}`}
+    >
+      {cfg.label}
+    </span>
+  );
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Offer Card
+// ─────────────────────────────────────────────────────────────────────────────
+
+function OfferCard({
+  offer,
+  isActive,
+}: {
+  offer: OfferSummary;
+  isActive: boolean;
+}) {
+  return (
+    <Link
+      to={`../offer/liste/${offer.id}`}
+      className={`block rounded-lg border p-3 transition-colors hover:bg-accent/40 ${
+        isActive ? "border-primary/30 bg-accent/60" : "bg-background"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold">
+            {offer.title || "(Sans titre)"}
           </div>
-          <Separator />
-          <ScrollArea className="h-[calc(100%-88px)] px-3 py-2">
-            <div className="space-y-2 pr-2">
-              {filteredCampaigns.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-lg border bg-background p-3 hover:bg-accent/40 transition"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-[13px] font-semibold">{c.name}</div>
-                    <StatusBadge status={c.status} />
-                  </div>
-                  <div className="mt-1 text-[12px] text-muted-foreground truncate">
-                    {c.org}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    <SoftPill>Data depot non renseignée</SoftPill>
-                    {c.eta && (
-                      <SoftPill className="bg-emerald-50 text-emerald-700 border-emerald-100">
-                        {c.eta}
-                      </SoftPill>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </aside>
+        </div>
 
-        {/* Center: Workspace */}
-        <main className="rounded-xl border bg-card p-3">
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="h-full flex flex-col"
-          >
-            <div className="flex items-center justify-between">
-              <TabsList className="h-8">
-                <TabsTrigger value="edition" className="h-8 text-sm">
-                  Edition
-                </TabsTrigger>
-                <TabsTrigger value="extraction" className="h-8 text-sm">
-                  Extraction
-                </TabsTrigger>
-                <TabsTrigger value="envoi" className="h-8 text-sm">
-                  Envoi
-                </TabsTrigger>
-                <TabsTrigger value="pieces" className="h-8 text-sm">
-                  Pieces jointes (1)
-                </TabsTrigger>
-              </TabsList>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="h-8">
-                  <Paperclip className="mr-2 h-4 w-4" />
-                  Attacher PDF
-                </Button>
-                <Button variant="outline" size="sm" className="h-8">
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Reanalyser les fichiers
-                </Button>
-              </div>
-            </div>
-
-            <Separator className="my-3" />
-
-            <TabsContent value="extraction" className="flex-1">
-              <div className="space-y-4">
-                {/* Type d'analyse */}
-                <section className="space-y-2">
-                  <div className="text-sm font-medium">Type d'analyse</div>
-                  <ToggleGroup
-                    type="single"
-                    value={analysisType}
-                    onValueChange={(v) => v && setAnalysisType(v)}
-                    className="flex flex-wrap gap-2"
-                  >
-                    {["Mixte", "Cahier des charges", "Offre simple"].map(
-                      (t) => (
-                        <ChipToggle
-                          key={t}
-                          value={t}
-                          label={t}
-                          checked={analysisType === t}
-                        />
-                      ),
-                    )}
-                  </ToggleGroup>
-                </section>
-
-                {/* Structure dominante */}
-                <section className="space-y-2">
-                  <div className="text-sm font-medium">Structure dominante</div>
-                  <ToggleGroup
-                    type="multiple"
-                    value={structure}
-                    onValueChange={(vals) => setStructure(vals)}
-                    className="flex flex-wrap gap-2"
-                  >
-                    {["Auto", "Tableau/Liste", "Paragraphe", "Mixte"].map(
-                      (s) => (
-                        <ChipToggle
-                          key={s}
-                          value={s}
-                          label={s}
-                          checked={structure.includes(s)}
-                        />
-                      ),
-                    )}
-                  </ToggleGroup>
-                  <div className="text-[12px] text-muted-foreground">
-                    Mixte · Auto · Nombre global: libre
-                  </div>
-                </section>
-
-                {/* Produits extraits et produits demandes */}
-                <section className="space-y-2">
-                  <div className="text-sm font-medium">
-                    Produits extraits et produits demandes
-                  </div>
-
-                  <Card className="border-emerald-200/70">
-                    <CardHeader className="py-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-[14px] font-semibold flex items-center gap-2">
-                          <Files className="h-4 w-4 text-emerald-600" />
-                          Produits extraits depuis les PDFs joints
-                          <span className="ml-1 text-emerald-700">9/9</span>
-                        </CardTitle>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" className="h-8">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Ajouter tout
-                          </Button>
-                          <Button variant="outline" size="sm" className="h-8">
-                            <Maximize2 className="mr-2 h-4 w-4" />
-                            Agrandir
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      {/* slider and percentage row */}
-                      <div className="flex items-center gap-3 py-2">
-                        <div className="flex-1">
-                          <Slider
-                            value={[threshold]}
-                            step={1}
-                            min={0}
-                            max={100}
-                            onValueChange={(v) => setThreshold(v[0] ?? 0)}
-                          />
-                        </div>
-                        <div className="text-sm font-medium w-16 text-right">
-                          {threshold}%
-                        </div>
-                        <Button
-                          variant="link"
-                          className="h-8 px-2 text-muted-foreground"
-                          onClick={() => setThreshold(20)}
-                        >
-                          Reset 20%
-                        </Button>
-                      </div>
-
-                      {/* extracted item card */}
-                      <div className="mt-2 rounded-xl border bg-background p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-[14px] font-semibold leading-5">
-                              {trunc(extractedExample.title, 90)}
-                            </div>
-                            <div className="mt-2 text-[12px] text-muted-foreground">
-                              {extractedExample.details}
-                            </div>
-                          </div>
-                          <Badge className="rounded-full bg-emerald-500 text-white px-3 py-1 text-[12px]">
-                            Conformité {extractedExample.conformity}%
-                          </Badge>
-                        </div>
-
-                        <div className="mt-3">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled
-                            className="h-8 bg-muted text-muted-foreground"
-                          >
-                            Déja ajouté
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </section>
-              </div>
-            </TabsContent>
-
-            {/* Other tabs (placeholders) */}
-            <TabsContent value="edition">
-              <div className="text-sm text-muted-foreground">
-                Edition content…
-              </div>
-            </TabsContent>
-            <TabsContent value="envoi">
-              <div className="text-sm text-muted-foreground">
-                Envoi content…
-              </div>
-            </TabsContent>
-            <TabsContent value="pieces">
-              <div className="text-sm text-muted-foreground">
-                Pieces jointes…
-              </div>
-            </TabsContent>
-          </Tabs>
-        </main>
-
-        {/* Right: Requested products */}
-        <aside className="rounded-xl border bg-card p-3">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-[13px] font-semibold">
-                Produits demandés dans la campagne
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-8">
-                <Plus className="mr-2 h-4 w-4" />
-                Ajouter
-              </Button>
-            </div>
-          </div>
-
-          <Separator className="my-3" />
-
-          <ScrollArea className="h-[calc(100%-52px)] pr-2">
-            <div className="space-y-2">
-              {requestedProducts.map((p) => (
-                <div key={p.id} className="rounded-lg border bg-background p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium leading-4 line-clamp-2">
-                        {p.title}
-                      </div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
-                        Qty: {p.qty}.0 | {p.keys}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {p.details}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        Cliquer pour details
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <IconButton aria-label="edit">
-                        <Edit3 className="h-4 w-4" />
-                      </IconButton>
-                      <IconButton aria-label="duplicate">
-                        <FilePlus2 className="h-4 w-4" />
-                      </IconButton>
-                      <IconButton aria-label="delete">
-                        <Trash2 className="h-4 w-4" />
-                      </IconButton>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </aside>
+        <StatusBadge status={offer.status} />
       </div>
+
+      <div className="mt-1 flex items-center gap-1 text-[12px] text-muted-foreground">
+        <Building2 className="h-3 w-3 shrink-0" />
+        <span className="truncate">{offer.medicalEntity.name}</span>
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <Users className="h-3 w-3" />
+          {offer.offerRecipients?.length} destinataire
+          {offer.offerRecipients?.length !== 1 ? "s" : ""}
+        </span>
+
+        <span className="ml-auto flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          {formatDate(offer.createdAt)}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeletons
+// ─────────────────────────────────────────────────────────────────────────────
+
+function OfferSkeletons() {
+  return (
+    <div className="space-y-2 pr-2">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="space-y-2 rounded-lg border p-3">
+          <div className="flex justify-between">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-4 w-14" />
+          </div>
+
+          <Skeleton className="h-3 w-1/2" />
+
+          <div className="flex gap-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="ml-auto h-3 w-16" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-/* ---------- Small helpers/components ---------- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: CampaignStatus }) {
-  const map: Record<CampaignStatus, { label: string; className: string }> = {
-    DRAFT: {
-      label: "DRAFT",
-      className: "bg-indigo-50 text-indigo-700 border border-indigo-100",
-    },
-    SENDING: {
-      label: "SENDING",
-      className: "bg-amber-50 text-amber-700 border border-amber-100",
-    },
-    SENT: {
-      label: "SENT",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    },
-  };
-  const { label, className } = map[status];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-        className,
-      )}
-    >
-      {label}
-    </span>
-  );
-}
-
-function SoftPill({
+export default function OffersPage({
+  activeOfferId,
   children,
-  className,
 }: {
-  children: React.ReactNode;
-  className?: string;
+  activeOfferId?: string;
+  children?: React.ReactNode;
 }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border bg-muted/40 px-2 py-0.5 text-[11px]",
-        className,
-      )}
-    >
-      {children}
-    </span>
-  );
-}
+  const [search, setSearch] = useState("");
 
-function ChipToggle({
-  value,
-  label,
-  checked,
-}: {
-  value: string;
-  label: string;
-  checked?: boolean;
-}) {
-  return (
-    <ToggleGroupItem
-      value={value}
-      aria-label={label}
-      className={cn(
-        "h-8 rounded-full px-3 text-[12px] font-medium",
-        "data-[state=on]:bg-foreground data-[state=on]:text-background",
-        "border bg-muted/30 hover:bg-muted/50",
-      )}
-    >
-      <span className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/40 bg-white/30 data-[state=on]:bg-white/20">
-        {checked ? <Check className="h-3 w-3" /> : null}
-      </span>
-      {label}
-    </ToggleGroupItem>
-  );
-}
+  const { data: offers, isLoading, isError, error } = useOffers();
 
-function IconButton({
-  children,
-  "aria-label": aria,
-}: {
-  children: React.ReactNode;
-  "aria-label": string;
-}) {
-  return (
-    <Button size="icon" variant="ghost" aria-label={aria} className="h-8 w-8">
-      {children}
-    </Button>
-  );
-}
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
 
-function trunc(s: string, n: number) {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+    if (!q || !offers) return offers ?? [];
+
+    return offers.filter(
+      (o) =>
+        o.title.toLowerCase().includes(q) ||
+        o.medicalEntity.name.toLowerCase().includes(q) ||
+        o.emailSubject.toLowerCase().includes(q),
+    );
+  }, [search, offers]);
+
+  return (
+    <div className="h-screen w-full overflow-hidden bg-background text-foreground">
+      <div className="grid h-full grid-cols-[300px_minmax(0,1fr)] gap-4 p-4">
+        {/* Sidebar */}
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card bg-white">
+          {/* Header */}
+          <div className="shrink-0 p-3 pb-2">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-base font-semibold">Offres</div>
+
+              <Button size="icon" variant="outline" className="h-7 w-7">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Rechercher une offre…"
+                className="h-8 pl-8 text-sm"
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Offers List */}
+          <ScrollArea className="flex-1 px-3 py-2">
+            {isLoading && <OfferSkeletons />}
+
+            {isError && (
+              <p className="py-6 text-center text-sm text-destructive">
+                {error instanceof Error
+                  ? error.message
+                  : "Impossible de charger les offres."}
+              </p>
+            )}
+
+            {!isLoading && !isError && filtered.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Aucune offre trouvée.
+              </p>
+            )}
+
+            {!isLoading && !isError && (
+              <div className="space-y-2 pr-2">
+                {filtered.map((offer) => (
+                  <OfferCard
+                    key={offer.id}
+                    offer={offer}
+                    isActive={offer.id === activeOfferId}
+                  />
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Footer */}
+          {!isLoading && offers && (
+            <div className="shrink-0 border-t px-4 py-2">
+              <p className="text-[11px] text-muted-foreground">
+                {filtered.length} / {offers.length} offre
+                {offers.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+          )}
+        </aside>
+
+        {/* Right Content */}
+        <main className="min-w-0 min-h-0 overflow-hidden rounded-xl border bg-card">
+          <div className="h-full overflow-auto">
+            {children ?? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Sélectionnez une offre pour voir les détails.
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }

@@ -1,9 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { HTTPError } from "ky"; // Importation du type d'erreur de ky
-import { api } from "../api";
+import ky, { HTTPError } from "ky";
 
-export type UserRole = "admin" | "accountant";
+export type UserRole =
+  | "admin"
+  | "accountant"
+  | "technique"
+  | "distributor"
+  | "agent_commercial";
 
 interface User {
   id: string;
@@ -11,72 +15,144 @@ interface User {
   firstName: string;
   lastName: string;
   role: UserRole;
+  email: string;
+  phone?: string;
+  city?: string;
+  signature?: string;
+  company?: string;
+  createdAt?: string;
 }
 
 interface AuthState {
   token: string | null;
   user: User | null;
   isAuthenticated: boolean;
-
-  login: (email: string, password: string) => Promise<string | void>; // Retourne un message d'erreur ou rien
+  hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
+  login: (email: string, password: string) => Promise<string | void>;
   logout: () => void;
+  fetchUser: () => Promise<void>;
 }
+
+const API_BASE_URL = "https://api.digitservz.dz";
+
+// ─── Authenticated API client ──────────────────────────────────────────────
+
+export const api = ky.create({
+  prefix: `${API_BASE_URL}/api/`, // keep "prefix" if that's what your ky version uses
+  timeout: 15000,
+  retry: 0,
+  hooks: {
+    beforeRequest: [
+      ({ request }) => {
+        let token = useAuthStore.getState().token;
+
+        // Fallback to localStorage during rehydration
+        if (!token) {
+          try {
+            const raw = localStorage.getItem("fk-pharm-auth");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              token = parsed?.state?.token ?? null;
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        if (token) {
+          request.headers.set("Authorization", `Bearer ${token}`);
+        }
+      },
+    ],
+    afterResponse: [
+      async ({ response }) => {
+        if (response.status === 401) {
+          useAuthStore.getState().logout();
+        }
+        return response;
+      },
+    ],
+  },
+});
+
+export function getAuthHeaders(): Record<string, string> {
+  let token = useAuthStore.getState().token;
+  if (!token) {
+    try {
+      const raw = localStorage.getItem("fk-pharm-auth");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        token = parsed?.state?.token ?? null;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// ─── Zustand Store ───────────────────────────────────────────────────────────
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       token: null,
       user: null,
-      isAuthenticated: true,
+      isAuthenticated: false,
+      hasHydrated: false,
+      setHasHydrated: (state: boolean) => set({ hasHydrated: state }),
 
-      login: async (email, password) => {
+      login: async (email: string, password: string) => {
         try {
-          const response = await api.post<{ token: string; user: User }>(
-            "auth/login",
-            { email, password },
-          );
+          const response = await api
+            .post("auth/login", { json: { email, password } })
+            .json<{ token: string; user: User }>();
 
           set({
             token: response.token,
             user: response.user,
             isAuthenticated: true,
           });
-
-          return; // Succès, on ne retourne rien
         } catch (error: any) {
-          // Si c'est une erreur HTTP (ex: 401, 400), on extrait le message du backend
           if (error instanceof HTTPError) {
             try {
-              const errorData = await error.response.json<{
+              const errorData = (await error.response.json()) as {
                 error?: string;
                 message?: string;
-              }>();
-              const serverMessage =
+              };
+              return (
                 errorData.error ||
                 errorData.message ||
-                "Identifiants incorrects";
-              console.error("Erreur Backend:", serverMessage);
-              return serverMessage; // On retourne le message pour l'afficher dans l'UI
+                "Identifiants incorrects"
+              );
             } catch {
-              return "Erreur serveur illisible";
+              return `Erreur serveur ${error.response.status}`;
             }
           }
-
-          console.error("Erreur réseau:", error);
           return "Erreur de connexion au serveur";
         }
       },
 
       logout: () => {
-        set({
-          token: null,
-          user: null,
-          isAuthenticated: false,
-        });
+        set({ token: null, user: null, isAuthenticated: false });
+        window.location.href = "/login";
+      },
+
+      fetchUser: async () => {
+        try {
+          const user = await api.get("auth/me").json<User>();
+          set({ user });
+        } catch (error) {
+          console.error("Erreur fetchUser:", error);
+        }
       },
     }),
     {
       name: "fk-pharm-auth",
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );

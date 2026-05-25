@@ -75,7 +75,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 type SupplierStatus = "active" | "inactive" | "suspended";
 
@@ -1066,7 +1066,7 @@ export default function SuppliersAdminPage() {
       <div className="space-y-6 p-6">
         <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <p className="text-sm text-slate-500">Module C / Administration</p>
+            <p className="text-sm text-slate-500">Administration</p>
 
             <h1 className="text-3xl font-semibold tracking-tight">
               Fournisseurs

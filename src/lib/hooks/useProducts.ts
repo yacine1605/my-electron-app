@@ -59,7 +59,28 @@ export const useGetProducts = () => {
     queryFn: () => api.get<Product[]>("products"),
   });
 };
+export const updateProductSchema = createProductSchema.partial().extend({
+  id: z.string(),
+});
 
+export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+
+export const useUpdateProduct = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...data }: UpdateProductInput) =>
+      api.put<Product>(`products/${id}`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["products", variables.id] });
+      toast.success("Produit mis à jour");
+    },
+    onError: (error: Error) => {
+      toast.error(error?.message || "Erreur lors de la mise à jour");
+    },
+  });
+};
 // --- Mutations ---
 
 export const useCreateProduct = () => {

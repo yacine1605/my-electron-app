@@ -1,9 +1,7 @@
 import { NavLink } from "react-router";
 import {
   LayoutDashboard,
-  FileUp,
   GitCompare,
-  FileSpreadsheet,
   History,
   Users,
   Receipt,
@@ -40,7 +38,7 @@ const navItems: NavItem[] = [
   {
     label: "Les Offres",
     icon: <GitCompare className="w-5 h-5" />,
-    path: "/offers",
+    path: "/admin/offers",
     group: "Offres",
   },
   // {
@@ -55,12 +53,12 @@ const navItems: NavItem[] = [
   //   path: "/bpu/generate",
   //   group: "BPU / DGE",
   // },
-  {
-    label: "Historique BPU/DGE",
-    icon: <History className="w-5 h-5" />,
-    path: "/bpu/history",
-    group: "BPU / DGE",
-  },
+  // {
+  //   label: "Historique BPU/DGE",
+  //   icon: <History className="w-5 h-5" />,
+  //   path: "/admin/bpu/history",
+  //   group: "BPU / DGE",
+  // },
   {
     label: "Fournisseurs",
     icon: <Building2 className="w-5 h-5" />,
@@ -73,34 +71,46 @@ const navItems: NavItem[] = [
     path: "/admin/products",
     group: "Gestion",
   },
+  // {
+  //   label: "Factures",
+  //   icon: <Receipt className="w-5 h-5" />,
+  //   path: "/admin/invoices",
+  //   group: "Comptabilité",
+  // },
+  // {
+  //   label: "Documents",
+  //   icon: <Receipt className="w-5 h-5" />,
+  //   path: "/admin/documents",
+  //   group: "Comptabilité",
+  // },
+  // {
+  //   label: "Paiements",
+  //   icon: <CreditCard className="w-5 h-5" />,
+  //   path: "/admin/payments",
+  //   group: "Comptabilité",
+  // },
+  // {
+  //   label: "Statistiques",
+  //   icon: <BarChart3 className="w-5 h-5" />,
+  //   path: "/admin/stats",
+  //   group: "Comptabilité",
+  // },
   {
-    label: "Factures",
-    icon: <Receipt className="w-5 h-5" />,
-    path: "/accounting/invoices",
-    group: "Comptabilité",
-  },
-  {
-    label: "Paiements",
-    icon: <CreditCard className="w-5 h-5" />,
-    path: "/admin/accounting/payments",
-    group: "Comptabilité",
-  },
-  {
-    label: "Statistiques",
-    icon: <BarChart3 className="w-5 h-5" />,
-    path: "/admin/accounting/stats",
-    group: "Comptabilité",
-  },
-  {
-    label: "Agents Commercial",
+    label: "Agents ",
     icon: <Users className="w-5 h-5" />,
-    path: "/settings/users",
+    path: "/admin/users",
+    group: "Paramètres",
+  },
+  {
+    label: "Distributeurs",
+    icon: <Users className="w-5 h-5" />,
+    path: "/admin/distributors",
     group: "Paramètres",
   },
   {
     label: "Paramètres",
     icon: <Settings className="w-5 h-5" />,
-    path: "/settings",
+    path: "/admin/settings",
     group: "Paramètres",
   },
 ];

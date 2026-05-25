@@ -65,7 +65,7 @@ const OffresPages = () => {
   const [analysisProgress, setAnalysisProgress] = useState<string[]>([]);
   const [comparisonResult, setComparisonResult] =
     useState<ComparisonResult | null>(null);
-  const [lotPDFs, setLotPDFs] = useState<Record<string, SupplierFile>>({});
+  const [, setLotPDFs] = useState<Record<string, SupplierFile>>({});
   const lot = "Lot1";
   const handleAddFournisseur = () => {
     const newFournisseur = `Fournissuer${fournisseurs.length + 1}`;
@@ -237,7 +237,7 @@ que les documents fournis : ${files.map((f, i) => `"Fournisseur ${String.fromCha
 
       addLog("Envoi à l'API Claude (analyse IA en cours)…");
 
-      const response = await fetch("http://localhost:5000/api/analyze", {
+      const response = await fetch("https://api.digitservz.dz/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

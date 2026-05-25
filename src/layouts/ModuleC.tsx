@@ -5,6 +5,10 @@ export default function ComptabiliteModule() {
   return (
     <div className="m-6 space-y-6">
       {/* Résumé financier en cartes */}
+      <h1 className="text-2xl font-bold">
+        Comptabilité & Suivi Suivi des factures, paiements, échéances et
+        statistiques.
+      </h1>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

@@ -1,34 +1,57 @@
-import ky from "ky";
 import { useAuthStore } from "./hooks/useAuth";
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "https://api.digitservz.dz/api/";
+let isLoggingOut = false;
 
-// Fonction utilitaire pour récupérer le header d'auth dynamiquement
-const getAuthHeaders = () => {
+// Never send a stale token to these endpoints
+const PUBLIC_ENDPOINTS = ["auth/login", "auth/register", "auth/refresh"];
+
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<T> {
   const token = useAuthStore.getState().token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+  const isPublic = PUBLIC_ENDPOINTS.some((pe) => endpoint.endsWith(pe));
 
-// Création de l'instance de base (sans les hooks problématiques)
-const kyInstance = ky.create({
-  prefix: API_BASE_URL,
-});
+  const headers = new Headers(options.headers || {});
+  headers.set("Content-Type", "application/json");
 
-// Notre objet API qui injecte le token à chaque appel
+  // Only attach token for protected routes
+  if (token && !isPublic) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (res.status === 401) {
+    if (!isLoggingOut) {
+      isLoggingOut = true;
+      useAuthStore.getState().logout();
+      setTimeout(() => {
+        isLoggingOut = false;
+      }, 0);
+    }
+    throw new Error("Unauthorized");
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
 export const api = {
-  get: <T>(url: string, options?: any) =>
-    kyInstance.get(url, { ...options, headers: getAuthHeaders() }).json<T>(),
-
-  post: <T>(url: string, data: any, options?: any) =>
-    kyInstance
-      .post(url, { ...options, json: data, headers: getAuthHeaders() })
-      .json<T>(),
-
-  put: <T>(url: string, data: any, options?: any) =>
-    kyInstance
-      .put(url, { ...options, json: data, headers: getAuthHeaders() })
-      .json<T>(),
-
-  delete: <T>(url: string, options?: any) =>
-    kyInstance.delete(url, { ...options, headers: getAuthHeaders() }).json<T>(),
+  get: <T>(url: string) => request<T>(url, { method: "GET" }),
+  post: <T>(url: string, data: unknown) =>
+    request<T>(url, { method: "POST", body: JSON.stringify(data) }),
+  put: <T>(url: string, data: unknown) =>
+    request<T>(url, { method: "PUT", body: JSON.stringify(data) }),
+  patch: <T>(url: string, data: unknown) =>
+    request<T>(url, { method: "PATCH", body: JSON.stringify(data) }),
+  delete: <T>(url: string) => request<T>(url, { method: "DELETE" }),
 };

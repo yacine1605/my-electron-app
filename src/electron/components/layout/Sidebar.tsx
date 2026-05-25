@@ -1,15 +1,8 @@
 import { NavLink } from "react-router";
 import {
   LayoutDashboard,
-  FileUp,
   GitCompare,
-  FileSpreadsheet,
-  History,
   Users,
-  Receipt,
-  CreditCard,
-  BarChart3,
-  Settings,
   //LogOut,
   ChevronLeft,
   Building2,
@@ -31,35 +24,24 @@ const navItems: NavItem[] = [
     path: "/",
     group: "Général",
   },
+  // {
+  //   label: "Creation Des offres",
+  //   icon: <GitCompare className="w-5 h-5" />,
+  //   path: "/offers/new",
+  //   group: "Offres",
+  // },
+
   {
-    label: "Importer des offres",
-    icon: <FileUp className="w-5 h-5" />,
-    path: "/offers/import",
-    group: "Offres",
-  },
-  {
-    label: "Comparer les offres",
+    label: "Liste de Offres",
     icon: <GitCompare className="w-5 h-5" />,
-    path: "/offers/compare",
+    path: "/offer/liste",
     group: "Offres",
   },
   {
-    label: "Modèles BPU/DGE",
-    icon: <FileSpreadsheet className="w-5 h-5" />,
-    path: "/bpu/templates",
-    group: "BPU / DGE",
-  },
-  {
-    label: "Générer BPU/DGE",
-    icon: <FileSpreadsheet className="w-5 h-5" />,
-    path: "/bpu/generate",
-    group: "BPU / DGE",
-  },
-  {
-    label: "Historique BPU/DGE",
-    icon: <History className="w-5 h-5" />,
-    path: "/bpu/history",
-    group: "BPU / DGE",
+    label: "Sous-Dossier",
+    icon: <Building2 className="w-5 h-5" />,
+    path: "/offers/document-folders",
+    group: "Gestion",
   },
   {
     label: "Fournisseurs",
@@ -68,41 +50,47 @@ const navItems: NavItem[] = [
     group: "Gestion",
   },
   {
+    label: "Distributeurs",
+    icon: <Building2 className="w-5 h-5" />,
+    path: "/distributors",
+    group: "Gestion",
+  },
+  {
     label: "Produits",
     icon: <Building2 className="w-5 h-5" />,
     path: "/products",
     group: "Gestion",
   },
-  {
-    label: "Factures",
-    icon: <Receipt className="w-5 h-5" />,
-    path: "/accounting/invoices",
-    group: "Comptabilité",
-  },
-  {
-    label: "Paiements",
-    icon: <CreditCard className="w-5 h-5" />,
-    path: "/accounting/payments",
-    group: "Comptabilité",
-  },
-  {
-    label: "Statistiques",
-    icon: <BarChart3 className="w-5 h-5" />,
-    path: "/accounting/stats",
-    group: "Comptabilité",
-  },
+  // {
+  //   label: "Factures",
+  //   icon: <Receipt className="w-5 h-5" />,
+  //   path: "/accounting/invoices",
+  //   group: "Comptabilité",
+  // },
+  // {
+  //   label: "Paiements",
+  //   icon: <CreditCard className="w-5 h-5" />,
+  //   path: "/accounting/payments",
+  //   group: "Comptabilité",
+  // },
+  // {
+  //   label: "Statistiques",
+  //   icon: <BarChart3 className="w-5 h-5" />,
+  //   path: "/accounting/stats",
+  //   group: "Comptabilité",
+  // },
   {
     label: "Utilisateurs",
     icon: <Users className="w-5 h-5" />,
-    path: "/settings/users",
+    path: "/user",
     group: "Paramètres",
   },
-  {
-    label: "Paramètres",
-    icon: <Settings className="w-5 h-5" />,
-    path: "/settings",
-    group: "Paramètres",
-  },
+  // {
+  //   label: "Paramètres",
+  //   icon: <Settings className="w-5 h-5" />,
+  //   path: "/settings",
+  //   group: "Paramètres",
+  // },
 ];
 
 export function Sidebar() {

@@ -1,16 +1,37 @@
-// pages/ProductsPage.tsx
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useGetProducts } from "@/lib/hooks/useProducts";
+import {
+  Product,
+  useGetProducts,
+  useDeleteProduct,
+} from "@/lib/hooks/useProducts";
 import { DataTable } from "../Bpu/data-table";
 import { AddProductDialog } from "./products/AddProductDialog";
-import { productColumns } from "./products/columns";
+import { EditProductDialog } from "./products/EditProductDialog";
+import { DeleteProductDialog } from "./products/DeleteProductDialog";
+import { getProductColumns } from "./products/columns";
 
 const ProductsPage = () => {
   const { data: products, isLoading, error } = useGetProducts();
+  const deleteProduct = useDeleteProduct();
+
   const [search, setSearch] = useState("");
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+
+  const columns = useMemo(
+    () => getProductColumns(setEditingProduct, setDeletingProduct),
+    [],
+  );
+
+  const filtered = useMemo(() => {
+    if (!products) return [];
+    return products.filter((p) =>
+      p.name?.toLowerCase().includes(search.toLowerCase()),
+    );
+  }, [products, search]);
 
   if (error) {
     return (
@@ -24,7 +45,6 @@ const ProductsPage = () => {
 
   return (
     <div className="flex flex-col space-y-6 p-1">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Produits</h2>
@@ -38,7 +58,6 @@ const ProductsPage = () => {
         </div>
       </div>
 
-      {/* Search */}
       <div className="flex items-center gap-4">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -50,24 +69,42 @@ const ProductsPage = () => {
           />
         </div>
         <span className="text-sm text-muted-foreground">
-          {products ? `${products.length} produits` : "Chargement..."}
+          {products ? `${filtered.length} produits` : "Chargement..."}
         </span>
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <p className="text-muted-foreground">Chargement des produits...</p>
         </div>
       ) : (
-        <DataTable
-          columns={productColumns}
-          data={products ?? []}
-          //searchKey="name"
-          // searchValue={search}
+        <DataTable columns={columns} data={filtered} />
+      )}
+
+      {editingProduct && (
+        <EditProductDialog
+          product={editingProduct}
+          open={!!editingProduct}
+          onOpenChange={(open) => !open && setEditingProduct(null)}
+        />
+      )}
+
+      {deletingProduct && (
+        <DeleteProductDialog
+          product={deletingProduct}
+          open={!!deletingProduct}
+          onOpenChange={(open) => !open && setDeletingProduct(null)}
+          onConfirm={() => {
+            deleteProduct.mutate(deletingProduct.id, {
+              onSuccess: () => setDeletingProduct(null),
+              onError: (err) => console.error("Delete failed:", err),
+            });
+          }}
+          isPending={deleteProduct.isPending}
         />
       )}
     </div>
   );
 };
+
 export default ProductsPage;
