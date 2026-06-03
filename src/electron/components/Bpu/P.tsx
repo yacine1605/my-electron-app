@@ -41,19 +41,6 @@ const STATUS_CONFIG: Record<OfferStatus, { label: string; className: string }> =
       className: "bg-emerald-50 text-emerald-700 border-emerald-200",
     },
   };
-
-function StatusBadge({ status }: { status: OfferStatus }) {
-  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cfg.className}`}
-    >
-      {cfg.label}
-    </span>
-  );
-}
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("fr-FR", {
     day: "2-digit",
@@ -62,9 +49,17 @@ function formatDate(iso: string) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Offer Card
-// ─────────────────────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: OfferStatus }) {
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
+
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${cfg.className}`}
+    >
+      {cfg.label}
+    </span>
+  );
+}
 
 function OfferCard({
   offer,
@@ -80,19 +75,19 @@ function OfferCard({
         isActive ? "border-primary/30 bg-accent/60" : "bg-background"
       }`}
     >
+      {/* Header: title + badge */}
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold">
-            {offer.title || "(Sans titre)"}
-          </div>
-        </div>
-
+        <p className="text-[13px] font-semibold leading-snug wrap-break-word min-w-0 flex-1">
+          {offer.title || "(Sans titre)"}
+        </p>
         <StatusBadge status={offer.status} />
       </div>
 
       <div className="mt-1 flex items-center gap-1 text-[12px] text-muted-foreground">
         <Building2 className="h-3 w-3 shrink-0" />
-        <span className="truncate">{offer.medicalEntity.name}</span>
+        <span className="wrap-break-word min-w-0">
+          {offer.medicalEntity.name}
+        </span>
       </div>
 
       <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -110,7 +105,6 @@ function OfferCard({
     </Link>
   );
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Skeletons
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,15 +168,9 @@ export default function OffersPage({
           <div className="shrink-0 p-3 pb-2">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-base font-semibold">Offres</div>
-
-              <Button size="icon" variant="outline" className="h-7 w-7">
-                <Plus className="h-4 w-4" />
-              </Button>
             </div>
-
             <div className="relative">
               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -213,7 +201,7 @@ export default function OffersPage({
             )}
 
             {!isLoading && !isError && (
-              <div className="space-y-2 pr-2">
+              <div className="space-y-2 pr-2 ">
                 {filtered.map((offer) => (
                   <OfferCard
                     key={offer.id}

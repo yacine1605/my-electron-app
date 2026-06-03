@@ -1,17 +1,18 @@
-import { useOfferStore } from "@/lib/hooks/useOffre";
+"use client";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useOfferStore } from "@/lib/hooks/useOffre";
 import { useAccountants } from "@/lib/hooks/useUsers";
 import { useAuthStore } from "@/lib/hooks/Useauthstore";
+
 import { getAuthHeaders } from "@/lib/hooks/apiClient";
 
-/**
- * Types
- */
+/* ─── Types ─────────────────────────────────────────────────────────────── */
+
 type MedicalEntity = {
   name: string;
   type: string;
-  speciality: string;
   address: string;
   city: string;
   phone: string;
@@ -29,10 +30,32 @@ type AttachmentType =
   | "sample"
   | "other";
 
-type AttachmentFile = {
-  file: File;
-  type: AttachmentType;
+type AttachmentFile = { file: File; type: AttachmentType };
+
+type ExtractedTenderLot = { number: string; object: string };
+
+type ExtractedTender = {
+  title?: string | null;
+  tenderNumber?: string | null;
+  name_organization?: string | null;
+  type_organization?: string | null;
+  ministry?: string | null;
+  wilaya?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  year?: string | null;
+  procedureType?: "appel_offre" | "consultation" | null;
+  lots?: ExtractedTenderLot[];
 };
+
+type ExtractedDocument = {
+  documentType: "TENDER" | "CONSULTATION" | "INVOICE" | "UNKNOWN";
+  tender?: ExtractedTender | null;
+  invoice?: any;
+};
+
+type Recipient = { id?: string; name: string; email: string; role?: string };
 
 type WizardData = {
   offerTitle: string;
@@ -42,15 +65,29 @@ type WizardData = {
   emailSignature: string;
   recipients: Recipient[];
 
-  // ── Plan de charge ──
+  lots: ExtractedTenderLot[];
+
   lotNumber: string;
   lotObject: string;
+
+  // ── En-tête plan de charge / offre ──
+  commercialName: string; // ← AJOUTÉ
+  consultationNumber: string; // ← AJOUTÉ
+  establishment: string; // ← AJOUTÉ
+  wilaya: string; // ← AJOUTÉ
+  depositLocation: string; // ← AJOUTÉ
+  procedureType: "appel_offre" | "consultation" | null; // ← AJOUTÉ
+  hospitalDepositDate: string; // ← AJOUTÉ
+  technicalDepartmentDepositDate: string; // ← AJOUTÉ
+
   warrantyDuration: string;
   deliveryDelay: string;
   savDuration: string;
   interventionDelay: string;
   savLocations: string;
   trainingDuration: string;
+  supplierCommercialAudit: string; // ← AJOUTÉ
+
   hasTechnicalSheet: boolean;
   hasConformityCertificate: boolean;
   hasOriginCertificate: boolean;
@@ -59,15 +96,7 @@ type WizardData = {
   hasCatalog: boolean;
   hasSample: boolean;
 
-  // ── Pièces jointes multiples ──
   attachments: AttachmentFile[];
-};
-
-type Recipient = {
-  id?: string;
-  name: string;
-  email: string;
-  role?: string;
 };
 
 type ValidationErrors = Record<string, string>;
@@ -101,7 +130,7 @@ type ApiState =
   | { status: "success"; result: SendResult }
   | { status: "error"; message: string };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+/* ─── Constants ─────────────────────────────────────────────────────────── */
 
 const API_BASE = "https://api.digitservz.dz/api";
 
@@ -142,15 +171,12 @@ const initialData: WizardData = {
   medicalEntity: {
     name: "",
     type: "",
-    speciality: "",
     address: "",
     city: "",
     phone: "",
     email: "",
     contactPerson: "",
   },
-
-  // ── Valeurs par défaut email ──
   emailSubject: "Relance concernant notre échange avec {{entityName}}",
   emailBody: `Bonjour {{contactPerson}},
 
@@ -159,19 +185,30 @@ Suite à nos échanges avec {{entityName}}, je me permets de vous relancer conce
 Nous restons à votre entière disposition pour toute information complémentaire ou précision sur les équipements et services proposés.
 
 Dans l'attente de votre retour, nous vous prions d'agréer, {{contactPerson}}, l'expression de nos salutations distinguées.`,
-
   emailSignature: "",
   recipients: [],
-
-  // Plan de charge
+  lots: [],
   lotNumber: "",
   lotObject: "",
+
+  // ── AJOUTÉ ──
+  commercialName: "",
+  consultationNumber: "",
+  establishment: "",
+  wilaya: "",
+  depositLocation: "",
+  procedureType: null,
+  hospitalDepositDate: "",
+  technicalDepartmentDepositDate: "",
+  supplierCommercialAudit: "",
+
   warrantyDuration: "",
   deliveryDelay: "",
   savDuration: "",
   interventionDelay: "",
   savLocations: "",
   trainingDuration: "",
+
   hasTechnicalSheet: false,
   hasConformityCertificate: false,
   hasOriginCertificate: false,
@@ -179,11 +216,10 @@ Dans l'attente de votre retour, nous vous prions d'agréer, {{contactPerson}}, l
   hasUserManual: false,
   hasCatalog: false,
   hasSample: false,
-
   attachments: [],
 };
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
+/* ─── Utilities ─────────────────────────────────────────────────────────── */
 
 function applyTemplateVariables(text: string, entity: MedicalEntity): string {
   return text
@@ -211,19 +247,31 @@ function isValidFile(file: File): string | null {
 
 function buildFormData(data: WizardData, sourceOfferId?: string): FormData {
   const fd = new FormData();
-
-  const payload: Record<string, unknown> = {
+  const payload = {
     sourceOfferId,
     offerTitle: data.offerTitle,
     medicalEntity: data.medicalEntity,
     emailSubject: data.emailSubject,
     emailBody: data.emailBody,
     emailSignature: data.emailSignature,
-    recipientIds: data.recipients.map((r) => r.id),
+    recipientIds: data.recipients.map((r) => r.id).filter(Boolean),
+    supplierIds: [], // ← AJOUTÉ (Zod attend un tableau)
 
-    // Plan de charge
+    lots: data.lots,
     lotNumber: data.lotNumber,
     lotObject: data.lotObject,
+
+    // ── AJOUTÉ ──
+    commercialName: data.commercialName,
+    consultationNumber: data.consultationNumber,
+    establishment: data.establishment,
+    wilaya: data.wilaya,
+    depositLocation: data.depositLocation,
+    procedureType: data.procedureType,
+    hospitalDepositDate: data.hospitalDepositDate || null,
+    technicalDepartmentDepositDate: data.technicalDepartmentDepositDate || null,
+    supplierCommercialAudit: data.supplierCommercialAudit,
+
     warrantyDuration: data.warrantyDuration,
     deliveryDelay: data.deliveryDelay,
     savDuration: data.savDuration,
@@ -249,7 +297,7 @@ function buildFormData(data: WizardData, sourceOfferId?: string): FormData {
   return fd;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+/* ─── Sub-components ────────────────────────────────────────────────────── */
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -304,12 +352,16 @@ function SendResultPanel({ result }: { result: SendResult }) {
 
   return (
     <div
-      className={`mt-4 rounded-xl border p-4 ${allOk ? "border-teal-200 bg-teal-50" : "border-amber-200 bg-amber-50"}`}
+      className={`mt-4 rounded-xl border p-4 ${
+        allOk ? "border-teal-200 bg-teal-50" : "border-amber-200 bg-amber-50"
+      }`}
     >
       <h4
-        className={`mb-3 font-semibold ${allOk ? "text-teal-800" : "text-amber-800"}`}
+        className={`mb-3 font-semibold ${
+          allOk ? "text-teal-800" : "text-amber-800"
+        }`}
       >
-        Résultat de l'envoi : {result.sent}/{result.total} email(s)
+        Résultat de l&apos;envoi : {result.sent}/{result.total} email(s)
       </h4>
 
       <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-gray-200">
@@ -388,11 +440,11 @@ function SendResultPanel({ result }: { result: SendResult }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/* ─── Main Component ──────────────────────────────────────────────────── */
+
 type MedicalEntityEmailWizardProps = {
   sourceOfferId?: string;
   initialWizardData?: Partial<WizardData>;
-  mode?: "technical";
 };
 
 export default function MedicalEntityEmailWizard({
@@ -400,10 +452,9 @@ export default function MedicalEntityEmailWizard({
   initialWizardData,
 }: MedicalEntityEmailWizardProps) {
   const { setOfferTitle, setCurrentOfferId } = useOfferStore();
-
-  const [currentStep, setCurrentStep] = useState(0);
   const userSignature = useAuthStore((s) => s.user?.signature);
 
+  const [currentStep, setCurrentStep] = useState(0);
   const [data, setData] = useState<WizardData>({
     ...initialData,
     ...initialWizardData,
@@ -419,15 +470,56 @@ export default function MedicalEntityEmailWizard({
       initialWizardData?.emailSignature ||
       userSignature ||
       initialData.emailSignature,
+    lotNumber: initialWizardData?.lotNumber ?? "",
+    lotObject: initialWizardData?.lotObject ?? "",
+    lots: initialWizardData?.lots?.length
+      ? initialWizardData.lots
+      : initialWizardData?.lotNumber || initialWizardData?.lotObject
+        ? [
+            {
+              number: initialWizardData.lotNumber ?? "",
+              object: initialWizardData.lotObject ?? "",
+            },
+          ]
+        : [],
+
+    // ── AJOUTÉ : merge des nouveaux champs depuis initialWizardData ──
+    commercialName:
+      initialWizardData?.commercialName ?? initialData.commercialName,
+    consultationNumber:
+      initialWizardData?.consultationNumber ?? initialData.consultationNumber,
+    establishment:
+      initialWizardData?.establishment ?? initialData.establishment,
+    wilaya: initialWizardData?.wilaya ?? initialData.wilaya,
+    depositLocation:
+      initialWizardData?.depositLocation ?? initialData.depositLocation,
+    procedureType:
+      initialWizardData?.procedureType ?? initialData.procedureType,
+    hospitalDepositDate:
+      initialWizardData?.hospitalDepositDate ?? initialData.hospitalDepositDate,
+    technicalDepartmentDepositDate:
+      initialWizardData?.technicalDepartmentDepositDate ??
+      initialData.technicalDepartmentDepositDate,
+    supplierCommercialAudit:
+      initialWizardData?.supplierCommercialAudit ??
+      initialData.supplierCommercialAudit,
   });
+
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [recipientSearch, setRecipientSearch] = useState("");
-  const [extractedData, setExtractedData] = useState<string | null>(null);
+  const [extractedData, setExtractedData] = useState<ExtractedDocument | null>(
+    null,
+  );
+  const [isExtractingPdf, setIsExtractingPdf] = useState(false);
   const [apiState, setApiState] = useState<ApiState>({ status: "idle" });
   const [toast, setToast] = useState<{
     msg: string;
     type: "ok" | "err" | "info" | "warn";
   } | null>(null);
+
+  const [isScanning, setIsScanning] = useState(false);
+  const [emailResults, setEmailResults] = useState<any[]>([]);
+  const [showEmailPicker, setShowEmailPicker] = useState(false);
 
   const showToast = useCallback(
     (msg: string, type: "ok" | "err" | "info" | "warn" = "info", ms = 5000) => {
@@ -439,17 +531,229 @@ export default function MedicalEntityEmailWizard({
 
   const { data: availableRecipients = [], isError, refetch } = useAccountants();
 
+  /* ── Extraction depuis les emails ── */
+  const getDataFromEmail = async () => {
+    setIsScanning(true);
+    try {
+      const response = await axios.post(
+        `${API_BASE}/email-extractor/scan`,
+        {},
+        { headers: getAuthHeaders() },
+      );
+      if (!response?.data?.results?.length) {
+        showToast("Aucun email avec PDF trouvé.", "warn");
+        return;
+      }
+      const usable = response.data.results.filter((r: any) => {
+        const d = r?.attachments?.[0]?.data ?? r?.attachments?.[0]?.invoice;
+        return d && d.documentType !== "UNKNOWN";
+      });
+      if (usable.length === 0) {
+        showToast("Aucun document reconnu.", "warn");
+        return;
+      }
+      if (usable.length === 1) {
+        setExtractedData(
+          usable[0]?.attachments?.[0]?.data ??
+            usable[0]?.attachments?.[0]?.invoice,
+        );
+        showToast("Données extraites avec succès !", "ok");
+      } else {
+        setEmailResults(usable);
+        setShowEmailPicker(true);
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        showToast(
+          `Erreur scan : ${error.response?.data?.error ?? error.message}`,
+          "err",
+        );
+      }
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  /* ── Extraction PDF ── */
+  async function extractDataFromPdf(file: File) {
+    if (file.type !== "application/pdf") {
+      showToast("Veuillez importer un fichier PDF.", "err");
+      return;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      showToast("PDF trop volumineux. Taille maximale : 100 MB.", "err");
+      return;
+    }
+
+    setIsExtractingPdf(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      const res = await fetch(`${API_BASE}/ai/extract-tender`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: formData,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const json = await res.json();
+      if (!res.ok)
+        throw new Error(json.message ?? "Erreur pendant l'extraction.");
+
+      const extracted: ExtractedDocument = json.data;
+
+      if (
+        extracted.documentType !== "TENDER" &&
+        extracted.documentType !== "CONSULTATION"
+      ) {
+        showToast("Le PDF ne semble pas être un cahier des charges.", "warn");
+        return;
+      }
+
+      setExtractedData(extracted);
+      showToast("PDF analysé avec succès. Formulaire rempli.", "ok");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erreur inconnue.";
+      showToast(`Erreur extraction PDF : ${message}`, "err");
+    } finally {
+      setIsExtractingPdf(false);
+    }
+  }
+
+  /* ── Application des données extraites au formulaire ── */
+  useEffect(() => {
+    if (!extractedData) return;
+    console.log("Extracted documentType:", extractedData.documentType);
+    console.log("Extracted tender:", extractedData.tender);
+
+    if (
+      extractedData.documentType === "TENDER" ||
+      extractedData.documentType === "CONSULTATION"
+    ) {
+      const tender = extractedData.tender;
+      const lots = tender?.lots ?? [];
+
+      setData((prev) => ({
+        ...prev,
+        offerTitle: tender?.title || prev.offerTitle,
+        consultationNumber: tender?.tenderNumber || prev.consultationNumber, // ← AJOUTÉ
+        procedureType: tender?.procedureType || prev.procedureType, // ← AJOUTÉ
+        ...(lots.length > 0
+          ? syncPrimaryLot(
+              lots.map((l) => ({
+                number: l.number,
+                object: l.object,
+              })),
+            )
+          : {}),
+        lots:
+          lots.length > 0
+            ? lots.map((l) => ({ number: l.number, object: l.object }))
+            : prev.lots,
+        medicalEntity: {
+          ...prev.medicalEntity,
+          name: tender?.name_organization || prev.medicalEntity.name,
+          type:
+            tender?.type_organization ||
+            detectEntityType(tender?.name_organization) ||
+            prev.medicalEntity.type,
+          city: tender?.wilaya || prev.medicalEntity.city,
+          address: tender?.address || prev.medicalEntity.address,
+          phone: tender?.phone || prev.medicalEntity.phone,
+          email: tender?.email || prev.medicalEntity.email,
+          contactPerson:
+            extractContactPerson(tender?.name_organization) ||
+            prev.medicalEntity.contactPerson,
+        },
+        // ── AJOUTÉ ──
+        wilaya: tender?.wilaya || prev.wilaya,
+        establishment: tender?.name_organization || prev.establishment,
+      }));
+    }
+
+    if (extractedData.documentType === "INVOICE") {
+      const invoice = extractedData.invoice || extractedData;
+      setData((prev) => ({
+        ...prev,
+        offerTitle: invoice?.offerTitle || prev.offerTitle,
+        medicalEntity: {
+          ...prev.medicalEntity,
+          name: invoice?.clientName || prev.medicalEntity.name,
+          address: invoice?.clientAddress || prev.medicalEntity.address,
+          phone: invoice?.vendorPhone || prev.medicalEntity.phone,
+          email: invoice?.vendorEmail || prev.medicalEntity.email,
+          contactPerson:
+            invoice?.clientName || prev.medicalEntity.contactPerson,
+          city: extractCity(invoice?.clientAddress) || prev.medicalEntity.city,
+          type:
+            detectEntityType(invoice?.clientName) || prev.medicalEntity.type,
+        },
+      }));
+    }
+  }, [extractedData]);
+
+  /* ── Helpers détection ── */
+  function detectEntityType(text?: string | null): string {
+    if (!text) return "";
+    const value = text.toLowerCase();
+    if (value.includes("clinique")) return "Clinique";
+    if (value.includes("hopital") || value.includes("hôpital"))
+      return "Hôpital";
+    if (value.includes("epsp")) return "EPSP";
+    if (value.includes("universite") || value.includes("université"))
+      return "Université";
+    if (value.includes("laboratoire")) return "Laboratoire";
+    return "";
+  }
+
+  function extractCity(address?: string | null): string {
+    if (!address) return "";
+    const cities = [
+      "Alger",
+      "Oran",
+      "Blida",
+      "Constantine",
+      "Annaba",
+      "Batna",
+      "Sétif",
+      "Tlemcen",
+      "Tizi Ouzou",
+      "Béchar",
+      "Ghardaïa",
+      "Ouargla",
+    ];
+    const normalized = address.toLowerCase();
+    for (const city of cities) {
+      if (normalized.includes(city.toLowerCase())) return city;
+    }
+    return "";
+  }
+
+  function extractContactPerson(text?: string | null): string {
+    if (!text) return "";
+    const match = text.match(/(Dr\.?\s+[A-ZÀ-ÿa-z\s]+)/i);
+    return match?.[1]?.trim() || "";
+  }
+
+  /* ── Filtre destinataires ── */
   const filteredRecipients = useMemo(() => {
     const q = recipientSearch.toLowerCase();
     return availableRecipients.filter(
       (r: any) =>
-        r.name.toLowerCase().includes(q) ||
-        r.email.toLowerCase().includes(q) ||
+        r.name?.toLowerCase().includes(q) ||
+        r.email?.toLowerCase().includes(q) ||
         (r.role ?? "").toLowerCase().includes(q),
     );
   }, [recipientSearch, availableRecipients]);
 
-  // ── Validation ──────────────────────────────────────────────────────────────
+  /* ── Validation ──────────────────────────────────────────────────────── */
   function validateStep(step: number): boolean {
     const errs: ValidationErrors = {};
 
@@ -458,8 +762,7 @@ export default function MedicalEntityEmailWizard({
         errs.name = "Le nom de l'entité est obligatoire.";
       if (!data.medicalEntity.type.trim())
         errs.type = "Le type d'entité est obligatoire.";
-      if (!data.medicalEntity.speciality.trim())
-        errs.speciality = "La spécialité est obligatoire.";
+
       if (!data.medicalEntity.city.trim())
         errs.city = "La ville est obligatoire.";
       if (!data.medicalEntity.email.trim())
@@ -471,10 +774,18 @@ export default function MedicalEntityEmailWizard({
     }
 
     if (step === 1) {
-      if (!data.lotNumber.trim())
-        errs.lotNumber = "Le n° de lot est obligatoire.";
-      if (!data.lotObject.trim())
-        errs.lotObject = "L'objet du lot est obligatoire.";
+      if (data.lots.length === 0) {
+        errs.lots = "Ajoutez au moins un lot.";
+      } else {
+        data.lots.forEach((lot, idx) => {
+          if (!lot.number.trim()) {
+            errs[`lot_number_${idx}`] = "Le n° de lot est obligatoire.";
+          }
+          if (!lot.object.trim()) {
+            errs[`lot_object_${idx}`] = "L'objet du lot est obligatoire.";
+          }
+        });
+      }
     }
 
     if (step === 2) {
@@ -500,7 +811,7 @@ export default function MedicalEntityEmailWizard({
     return Object.keys(errs).length === 0;
   }
 
-  // ── Navigation ──────────────────────────────────────────────────────────────
+  /* ── Navigation ────────────────────────────────────────────────────── */
   function handleNext() {
     if (!validateStep(currentStep)) return;
     setCurrentStep((p) => Math.min(p + 1, STEPS.length - 1));
@@ -535,7 +846,42 @@ export default function MedicalEntityEmailWizard({
     setData((prev) => ({ ...prev, [key]: value }));
   }
 
-  // ── Recipients ──────────────────────────────────────────────────────────────
+  /* ── Lots management ──────────────────────────────────────────────────── */
+  function syncPrimaryLot(lots: ExtractedTenderLot[]) {
+    return {
+      lotNumber: lots[0]?.number ?? "",
+      lotObject: lots[0]?.object ?? "",
+    };
+  }
+
+  function addLot() {
+    setData((prev) => {
+      const lots = [...prev.lots, { number: "", object: "" }];
+      return { ...prev, lots, ...syncPrimaryLot(lots) };
+    });
+  }
+
+  function removeLot(index: number) {
+    setData((prev) => {
+      const lots = prev.lots.filter((_, i) => i !== index);
+      return { ...prev, lots, ...syncPrimaryLot(lots) };
+    });
+  }
+
+  function updateLot(index: number, key: "number" | "object", value: string) {
+    setData((prev) => {
+      const lots = prev.lots.map((lot, i) =>
+        i === index ? { ...lot, [key]: value } : lot,
+      );
+      return {
+        ...prev,
+        lots,
+        ...syncPrimaryLot(lots),
+      };
+    });
+  }
+
+  /* ── Recipients ────────────────────────────────────────────────────── */
   function toggleRecipient(recipient: Recipient) {
     setData((prev) => {
       const exists = prev.recipients.some((r) => r.id === recipient.id);
@@ -548,7 +894,7 @@ export default function MedicalEntityEmailWizard({
     });
   }
 
-  // ── Attachments ─────────────────────────────────────────────────────────────
+  /* ── Attachments ─────────────────────────────────────────────────────── */
   function addAttachment(file: File) {
     const err = isValidFile(file);
     if (err) {
@@ -561,7 +907,14 @@ export default function MedicalEntityEmailWizard({
     }));
   }
 
-  // ── API: Send ───────────────────────────────────────────────────────────────
+  function removeAttachment(index: number) {
+    setData((prev) => ({
+      ...prev,
+      attachments: prev.attachments.filter((_, i) => i !== index),
+    }));
+  }
+
+  /* ── API: Send ───────────────────────────────────────────────────────── */
   async function handleSend() {
     const allValid = [0, 1, 2, 3, 4].every((s) => validateStep(s));
     if (!allValid) {
@@ -574,7 +927,7 @@ export default function MedicalEntityEmailWizard({
     try {
       const res = await fetch(`${API_BASE}/offers/send`, {
         method: "POST",
-        headers: getAuthHeaders(), // ajoute Authorization: Bearer <token>
+        headers: getAuthHeaders(),
         body: buildFormData(data, sourceOfferId),
       });
 
@@ -587,9 +940,9 @@ export default function MedicalEntityEmailWizard({
       setOfferTitle(data.offerTitle);
 
       showToast(
-        `${result.sent}/${result.total} email(s) envoyé(s)`,
+        // `${result.sent}/${result.total} email(s) envoyé(s)`,
         result.failed === 0 ? "ok" : "warn",
-        6000,
+        // 6000,
       );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Erreur inconnue";
@@ -598,13 +951,14 @@ export default function MedicalEntityEmailWizard({
     }
   }
 
-  // ── API: Draft ──────────────────────────────────────────────────────────────
+  /* ── API: Draft ────────────────────────────────────────────────────── */
   async function handleSaveDraft() {
     setApiState({ status: "loading", action: "draft" });
 
     try {
       const res = await fetch(`${API_BASE}/offers/draft`, {
         method: "POST",
+        headers: getAuthHeaders(),
         body: buildFormData(data, sourceOfferId),
       });
 
@@ -623,214 +977,119 @@ export default function MedicalEntityEmailWizard({
     }
   }
 
-  // ── Derived loading flags ───────────────────────────────────────────────────
+  /* ── Derived flags ───────────────────────────────────────────────────── */
   const isSending = apiState.status === "loading" && apiState.action === "send";
   const isSavingDraft =
     apiState.status === "loading" && apiState.action === "draft";
   const isLoading = apiState.status === "loading";
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [emailResults, setEmailResults] = useState<any[]>([]);
-  const [showEmailPicker, setShowEmailPicker] = useState(false);
-
-  function applyExtractedResult(result: any) {
-    const extracted =
-      result?.attachments?.[0]?.data ||
-      result?.attachments?.[0]?.invoice ||
-      null;
-    if (!extracted) return;
-    setExtractedData(extracted);
-    setShowEmailPicker(false);
-    showToast("Données extraites avec succès !", "ok");
-  }
-
-  const getDataFromEmail = async () => {
-    setIsScanning(true);
-    try {
-      const response = await axios.post(`${API_BASE}/email-extractor/scan`);
-      if (!response?.data?.results?.length) {
-        showToast("Aucun email avec PDF trouvé.", "warn");
-        return;
-      }
-      const usable = response.data.results.filter((r: any) => {
-        const data = r?.attachments?.[0]?.data ?? r?.attachments?.[0]?.invoice;
-        return data && data.documentType !== "UNKNOWN";
-      });
-      if (usable.length === 0) {
-        showToast("Aucun document reconnu.", "warn");
-        return;
-      }
-      if (usable.length === 1) {
-        applyExtractedResult(usable[0]);
-      } else {
-        setEmailResults(usable);
-        setShowEmailPicker(true);
-      }
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        showToast(
-          `Erreur scan : ${error.response?.data?.error ?? error.message}`,
-          "err",
-        );
-      }
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
+  /* ═══════════════════════════════════════════════════════════════════════
+     RENDERERS PAR ÉTAPE
+     ═══════════════════════════════════════════════════════════════════════ */
   useEffect(() => {
-    if (!extractedData) return;
-    if (
-      extractedData?.documentType === "TENDER" ||
-      extractedData?.documentType === "CONSULTATION"
-    ) {
-      const tender = extractedData.tender;
-      setData((prev) => ({
+    setData((prev) => {
+      if (prev.lots.length > 0) return prev;
+
+      const seeded =
+        prev.lotNumber || prev.lotObject
+          ? [
+              {
+                number: prev.lotNumber,
+                object: prev.lotObject,
+              },
+            ]
+          : [{ number: "", object: "" }];
+
+      return {
         ...prev,
-        offerTitle: tender?.title || prev.offerTitle,
-        lotNumber: tender?.lots?.[0] || prev.lotNumber,
-        lotObject: tender?.title || prev.lotObject,
-        medicalEntity: {
-          ...prev.medicalEntity,
-          name: tender?.organization || prev.medicalEntity.name,
-          type:
-            detectEntityType(tender?.organization) || prev.medicalEntity.type,
-          city: tender?.wilaya || prev.medicalEntity.city,
-          address: tender?.address || prev.medicalEntity.address,
-          phone: tender?.phone || prev.medicalEntity.phone,
-          email: tender?.email || prev.medicalEntity.email,
-          contactPerson:
-            extractContactPerson(tender?.organization) ||
-            prev.medicalEntity.contactPerson,
-          speciality:
-            detectSpeciality(tender?.title) || prev.medicalEntity.speciality,
-        },
-      }));
-    }
-    if (extractedData.documentType === "INVOICE") {
-      const invoice = extractedData.invoice || extractedData;
-      setData((prev) => ({
-        ...prev,
-        offerTitle: invoice?.offerTitle || prev.offerTitle,
-        medicalEntity: {
-          ...prev.medicalEntity,
-          name: invoice?.clientName || prev.medicalEntity.name,
-          address: invoice?.clientAddress || prev.medicalEntity.address,
-          phone: invoice?.vendorPhone || prev.medicalEntity.phone,
-          email: invoice?.vendorEmail || prev.medicalEntity.email,
-          contactPerson:
-            invoice?.clientName || prev.medicalEntity.contactPerson,
-          city: extractCity(invoice?.clientAddress) || prev.medicalEntity.city,
-          type:
-            detectEntityType(invoice?.clientName) || prev.medicalEntity.type,
-          speciality:
-            detectSpeciality(invoice?.offerTitle) ||
-            prev.medicalEntity.speciality,
-        },
-      }));
-    }
-  }, [extractedData]);
+        lots: seeded,
+        ...syncPrimaryLot(seeded),
+      };
+    });
+  }, []);
 
-  function detectEntityType(text?: string | null): string {
-    if (!text) return "";
-    const value = text.toLowerCase();
-    if (value.includes("clinique")) return "Clinique";
-    if (value.includes("hopital") || value.includes("hôpital"))
-      return "Hôpital";
-    if (value.includes("epsp")) return "EPSP";
-    if (value.includes("universite") || value.includes("université"))
-      return "Université";
-    if (value.includes("laboratoire")) return "Laboratoire";
-    return "";
-  }
-
-  function detectSpeciality(text?: string | null): string {
-    if (!text) return "";
-    const value = text.toLowerCase();
-    if (value.includes("cardio")) return "Cardiologie";
-    if (value.includes("dentaire")) return "Dentaire";
-    if (value.includes("imagerie")) return "Imagerie Médicale";
-    if (value.includes("laboratoire")) return "Laboratoire";
-    if (value.includes("médecine")) return "Médecine Générale";
-    return "";
-  }
-
-  function extractCity(address?: string | null): string {
-    if (!address) return "";
-    const cities = [
-      "Alger",
-      "Oran",
-      "Blida",
-      "Constantine",
-      "Annaba",
-      "Batna",
-      "Sétif",
-      "Tlemcen",
-      "Tizi Ouzou",
-      "Béchar",
-      "Ghardaïa",
-      "Ouargla",
-    ];
-    const normalized = address.toLowerCase();
-    for (const city of cities) {
-      if (normalized.includes(city.toLowerCase())) return city;
-    }
-    return "";
-  }
-
-  function extractContactPerson(text?: string | null): string {
-    if (!text) return "";
-    const match = text.match(/(Dr\.?\s+[A-ZÀ-ÿa-z\s]+)/i);
-    return match?.[1]?.trim() || "";
-  }
-
-  // ═════════════════════════════════════════════════════════════════════════════
-  // RENDERERS PAR ÉTAPE
-  // ═════════════════════════════════════════════════════════════════════════════
-
-  // ── ÉTAPE 0 : ENTITÉ ───────────────────────────────────────────────────────
   function renderStep0() {
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <button
-            type="button"
-            onClick={getDataFromEmail}
-            disabled={isScanning}
-            className="flex items-center gap-2 rounded-lg border border-teal-500 px-4 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isScanning ? (
-              <>
-                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-                Scan en cours…
-              </>
-            ) : (
-              <>📧 Scanner les emails</>
-            )}
-          </button>
-          {extractedData && (
-            <p className="mt-1 text-xs text-teal-600">
-              ✓ Données extraites depuis votre boîte mail
-            </p>
-          )}
-        </div>
+      <>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="md:col-span-2 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={getDataFromEmail}
+              disabled={isScanning}
+              className="flex items-center gap-2 rounded-lg border border-teal-500 px-4 py-2 text-sm font-medium text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isScanning ? (
+                <>
+                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+                  Scan en cours…
+                </>
+              ) : (
+                <>📧 Scanner les emails</>
+              )}
+            </button>
 
-        <div className="md:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Titre de l'offre
-          </label>
-          <input
-            type="text"
-            value={data.offerTitle}
-            onChange={(e) => {
-              const value = e.target.value;
-              setData((prev) => ({ ...prev, offerTitle: value }));
-            }}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-            placeholder="Ex : Acquisition équipements médicaux"
-          />
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-blue-500 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50">
+              {isExtractingPdf ? (
+                <>
+                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                  Analyse du PDF…
+                </>
+              ) : (
+                <>📄 Importer PDF</>
+              )}
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                className="hidden"
+                disabled={isExtractingPdf}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) extractDataFromPdf(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Titre de l&apos;offre
+            </label>
+            <input
+              type="text"
+              value={data.offerTitle}
+              onChange={(e) =>
+                setData((prev) => ({ ...prev, offerTitle: e.target.value }))
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : Acquisition équipements médicaux"
+            />
+          </div>
+
+          {data.lots.length > 0 && (
+            <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <p className="mb-3 text-sm font-semibold text-blue-800">
+                Lots détectés ({data.lots.length})
+              </p>
+              <div className="space-y-2">
+                {data.lots.map((lot, idx) => (
+                  <div
+                    key={`${lot.number}-${idx}`}
+                    className="rounded-lg border border-blue-100 bg-white p-3"
+                  >
+                    <div className="font-medium text-blue-800">
+                      Lot {lot.number}
+                    </div>
+                    <div className="text-sm text-gray-700">{lot.object}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {extractedData?.documentType && (
-            <div className="mt-2 flex items-center gap-2">
+            <div className="md:col-span-2 flex items-center gap-2">
               <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-medium text-teal-700">
                 Détecté : {extractedData.documentType}
               </span>
@@ -841,217 +1100,342 @@ export default function MedicalEntityEmailWizard({
               )}
             </div>
           )}
-        </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Nom de l'entité *
-          </label>
-          <input
-            type="text"
-            value={data.medicalEntity.name}
-            onChange={(e) => updateMedicalEntity("name", e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-              errors.name
-                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-            }`}
-            placeholder="Ex : CHU Mustapha"
-          />
-          <FieldError message={errors.name} />
-        </div>
+          {/* ── ENTITÉ MÉDICALE ── */}
+          <div className="md:col-span-2">
+            <h3 className="mb-2 text-sm font-semibold text-gray-800">
+              Entité médicale
+            </h3>
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Type d'entité *
-          </label>
-          <input
-            type="text"
-            value={data.medicalEntity.type}
-            onChange={(e) => updateMedicalEntity("type", e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-              errors.type
-                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-            }`}
-            placeholder="Ex : Hôpital, Clinique, Université"
-          />
-          <FieldError message={errors.type} />
-        </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Nom de l&apos;entité *
+            </label>
+            <input
+              type="text"
+              value={data.medicalEntity.name}
+              onChange={(e) => updateMedicalEntity("name", e.target.value)}
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                errors.name
+                  ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                  : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+              }`}
+              placeholder="Ex : CHU Mustapha"
+            />
+            <FieldError message={errors.name} />
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Spécialité *
-          </label>
-          <input
-            type="text"
-            value={data.medicalEntity.speciality}
-            onChange={(e) => updateMedicalEntity("speciality", e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-              errors.speciality
-                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-            }`}
-            placeholder="Ex : Cardiologie"
-          />
-          <FieldError message={errors.speciality} />
-        </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Type d&apos;entité *
+            </label>
+            <input
+              type="text"
+              value={data.medicalEntity.type}
+              onChange={(e) => updateMedicalEntity("type", e.target.value)}
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                errors.type
+                  ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                  : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+              }`}
+              placeholder="Ex : Hôpital, Clinique, Université"
+            />
+            <FieldError message={errors.type} />
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Ville *
-          </label>
-          <input
-            type="text"
-            value={data.medicalEntity.city}
-            onChange={(e) => updateMedicalEntity("city", e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-              errors.city
-                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-            }`}
-            placeholder="Ex : Alger"
-          />
-          <FieldError message={errors.city} />
-        </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Ville *
+            </label>
+            <input
+              type="text"
+              value={data.medicalEntity.city}
+              onChange={(e) => updateMedicalEntity("city", e.target.value)}
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                errors.city
+                  ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                  : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+              }`}
+              placeholder="Ex : Alger"
+            />
+            <FieldError message={errors.city} />
+          </div>
 
-        <div className="md:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Adresse
-          </label>
-          <input
-            type="text"
-            value={data.medicalEntity.address}
-            onChange={(e) => updateMedicalEntity("address", e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-            placeholder="Ex : Rue Didouche Mourad"
-          />
-        </div>
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Adresse
+            </label>
+            <input
+              type="text"
+              value={data.medicalEntity.address}
+              onChange={(e) => updateMedicalEntity("address", e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : Rue Didouche Mourad"
+            />
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Téléphone
-          </label>
-          <input
-            type="text"
-            value={data.medicalEntity.phone}
-            onChange={(e) => updateMedicalEntity("phone", e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-            placeholder="Ex : 0550 00 00 00"
-          />
-        </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Téléphone
+            </label>
+            <input
+              type="text"
+              value={data.medicalEntity.phone}
+              onChange={(e) => updateMedicalEntity("phone", e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : 0550 00 00 00"
+            />
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Email de l'entité *
-          </label>
-          <input
-            type="email"
-            value={data.medicalEntity.email}
-            onChange={(e) => updateMedicalEntity("email", e.target.value)}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-              errors.email
-                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-            }`}
-            placeholder="Ex : contact@hopital.dz"
-          />
-          <FieldError message={errors.email} />
-        </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Email de l&apos;entité *
+            </label>
+            <input
+              type="email"
+              value={data.medicalEntity.email}
+              onChange={(e) => updateMedicalEntity("email", e.target.value)}
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                errors.email
+                  ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                  : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+              }`}
+              placeholder="Ex : contact@hopital.dz"
+            />
+            <FieldError message={errors.email} />
+          </div>
 
-        <div className="md:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Contact principal *
-          </label>
-          <input
-            type="text"
-            value={data.medicalEntity.contactPerson}
-            onChange={(e) =>
-              updateMedicalEntity("contactPerson", e.target.value)
-            }
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-              errors.contactPerson
-                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-            }`}
-            placeholder="Ex : Dr. Ahmed Benali"
-          />
-          <FieldError message={errors.contactPerson} />
-        </div>
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Contact principal *
+            </label>
+            <input
+              type="text"
+              value={data.medicalEntity.contactPerson}
+              onChange={(e) =>
+                updateMedicalEntity("contactPerson", e.target.value)
+              }
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                errors.contactPerson
+                  ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                  : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+              }`}
+              placeholder="Ex : Dr. Ahmed Benali"
+            />
+            <FieldError message={errors.contactPerson} />
+          </div>
 
-        {showEmailPicker && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-gray-900">
-                  {emailResults.length} emails détectés — lequel utiliser ?
-                </h2>
+          {/* ── EN-TÊTE PLAN DE CHARGE / OFFRE ── */}
+          <div className="md:col-span-2 mt-2">
+            <h3 className="mb-2 text-sm font-semibold text-gray-800">
+              En-tête de l&apos;offre
+            </h3>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Nom commercial / Raison sociale
+            </label>
+            <input
+              type="text"
+              value={data.commercialName}
+              onChange={(e) =>
+                updatePlanDeCharge("commercialName", e.target.value)
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : Digital Services"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              N° consultation / Appel d&apos;offres
+            </label>
+            <input
+              type="text"
+              value={data.consultationNumber}
+              onChange={(e) =>
+                updatePlanDeCharge("consultationNumber", e.target.value)
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : 2024-045-AO"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Établissement
+            </label>
+            <input
+              type="text"
+              value={data.establishment}
+              onChange={(e) =>
+                updatePlanDeCharge("establishment", e.target.value)
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : CHU Mustapha Pacha"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Wilaya
+            </label>
+            <input
+              type="text"
+              value={data.wilaya}
+              onChange={(e) => updatePlanDeCharge("wilaya", e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : Alger"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Lieu de dépôt
+            </label>
+            <input
+              type="text"
+              value={data.depositLocation}
+              onChange={(e) =>
+                updatePlanDeCharge("depositLocation", e.target.value)
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Ex : Bureau des marchés, 1er étage"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Type de procédure
+            </label>
+            <select
+              value={data.procedureType ?? ""}
+              onChange={(e) =>
+                updatePlanDeCharge(
+                  "procedureType",
+                  e.target.value === ""
+                    ? null
+                    : (e.target.value as "appel_offre" | "consultation"),
+                )
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            >
+              <option value="">— Sélectionner —</option>
+              <option value="appel_offre">Appel d&apos;offres</option>
+              <option value="consultation">Consultation</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Date dépôt à l&apos;hôpital
+            </label>
+            <input
+              type="date"
+              value={data.hospitalDepositDate}
+              onChange={(e) =>
+                updatePlanDeCharge("hospitalDepositDate", e.target.value)
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Date dépôt au service technique
+            </label>
+            <input
+              type="date"
+              value={data.technicalDepartmentDepositDate}
+              onChange={(e) =>
+                updatePlanDeCharge(
+                  "technicalDepartmentDepositDate",
+                  e.target.value,
+                )
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            />
+          </div>
+
+          {showEmailPicker && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-base font-semibold text-gray-900">
+                    {emailResults.length} emails détectés — lequel utiliser ?
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailPicker(false)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="max-h-96 space-y-3 overflow-y-auto">
+                  {emailResults.map((result, index) => {
+                    const attachment = result?.attachments?.[0];
+                    const d = attachment?.data ?? attachment?.invoice;
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => {
+                          setExtractedData(d);
+                          setShowEmailPicker(false);
+                          showToast("Données extraites avec succès !", "ok");
+                        }}
+                        className="w-full rounded-xl border border-gray-200 p-4 text-left transition hover:border-teal-400 hover:bg-teal-50"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-gray-800">
+                              {result.subject || "Sans objet"}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs text-gray-500">
+                              {result.from}
+                            </p>
+                            <p className="mt-0.5 text-xs text-gray-400">
+                              📎 {attachment?.filename}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                d?.documentType === "TENDER"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : d?.documentType === "INVOICE"
+                                    ? "bg-green-100 text-green-700"
+                                    : d?.documentType === "CONSULTATION"
+                                      ? "bg-purple-100 text-purple-700"
+                                      : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {d?.documentType ?? "UNKNOWN"}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowEmailPicker(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="mt-4 w-full rounded-lg border border-gray-200 py-2 text-sm text-gray-500 hover:bg-gray-50"
                 >
-                  ✕
+                  Annuler
                 </button>
               </div>
-              <div className="max-h-96 space-y-3 overflow-y-auto">
-                {emailResults.map((result, index) => {
-                  const attachment = result?.attachments?.[0];
-                  const data = attachment?.data ?? attachment?.invoice;
-                  return (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => applyExtractedResult(result)}
-                      className="w-full rounded-xl border border-gray-200 p-4 text-left transition hover:border-teal-400 hover:bg-teal-50"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-gray-800">
-                            {result.subject || "Sans objet"}
-                          </p>
-                          <p className="mt-0.5 truncate text-xs text-gray-500">
-                            {result.from}
-                          </p>
-                          <p className="mt-0.5 text-xs text-gray-400">
-                            📎 {attachment?.filename}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                              data?.documentType === "TENDER"
-                                ? "bg-blue-100 text-blue-700"
-                                : data?.documentType === "INVOICE"
-                                  ? "bg-green-100 text-green-700"
-                                  : data?.documentType === "CONSULTATION"
-                                    ? "bg-purple-100 text-purple-700"
-                                    : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {data?.documentType ?? "UNKNOWN"}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowEmailPicker(false)}
-                className="mt-4 w-full rounded-lg border border-gray-200 py-2 text-sm text-gray-500 hover:bg-gray-50"
-              >
-                Annuler
-              </button>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </>
     );
   }
 
-  // ── ÉTAPE 1 : PLAN DE CHARGE ───────────────────────────────────────────────
   function renderStep1() {
     const docFields: {
       key: keyof WizardData;
@@ -1093,52 +1477,95 @@ export default function MedicalEntityEmailWizard({
           Renseignez les informations du Plan de charge individuel.
         </p>
 
-        {/* ── Lots ── */}
         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-800">Lots</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                N° lot *
-              </label>
-              <input
-                type="text"
-                value={data.lotNumber}
-                onChange={(e) =>
-                  updatePlanDeCharge("lotNumber", e.target.value)
-                }
-                className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-                  errors.lotNumber
-                    ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                    : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-                }`}
-                placeholder="Ex : 04, 5"
-              />
-              <FieldError message={errors.lotNumber} />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Objet du lot *
-              </label>
-              <input
-                type="text"
-                value={data.lotObject}
-                onChange={(e) =>
-                  updatePlanDeCharge("lotObject", e.target.value)
-                }
-                className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-                  errors.lotObject
-                    ? "border-red-400 focus:border-red-400 focus:ring-red-300"
-                    : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
-                }`}
-                placeholder="Ex : Équipements de laboratoire"
-              />
-              <FieldError message={errors.lotObject} />
-            </div>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800">
+              Lots ({data.lots.length})
+            </h3>
+
+            <button
+              type="button"
+              onClick={addLot}
+              className="rounded-lg border border-teal-500 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-50"
+            >
+              + Ajouter un lot
+            </button>
           </div>
+
+          {data.lots.length === 0 && (
+            <p className="text-xs text-gray-500">
+              Aucun lot. Cliquez sur « Ajouter un lot ».
+            </p>
+          )}
+
+          <div className="space-y-3">
+            {data.lots.map((lot, idx) => (
+              <div
+                key={idx}
+                className="rounded-lg border border-gray-200 bg-white p-3"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-600">
+                    Lot {idx + 1}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => removeLot(idx)}
+                    className="rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+                  >
+                    Supprimer
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                      N° lot *
+                    </label>
+
+                    <input
+                      type="text"
+                      value={lot.number}
+                      onChange={(e) => updateLot(idx, "number", e.target.value)}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                        errors[`lot_number_${idx}`]
+                          ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                          : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+                      }`}
+                      placeholder="Ex : 04, 5"
+                    />
+
+                    <FieldError message={errors[`lot_number_${idx}`]} />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">
+                      Objet du lot *
+                    </label>
+
+                    <input
+                      type="text"
+                      value={lot.object}
+                      onChange={(e) => updateLot(idx, "object", e.target.value)}
+                      className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                        errors[`lot_object_${idx}`]
+                          ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                          : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+                      }`}
+                      placeholder="Ex : Équipements de laboratoire"
+                    />
+
+                    <FieldError message={errors[`lot_object_${idx}`]} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <FieldError message={errors.lots} />
         </div>
 
-        {/* ── Documents requis ── */}
         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
           <h3 className="mb-3 text-sm font-semibold text-gray-800">
             Documents requis (cases du plan de charge)
@@ -1151,12 +1578,9 @@ export default function MedicalEntityEmailWizard({
               >
                 <input
                   type="checkbox"
-                  checked={!!data[key as keyof WizardData]}
+                  checked={!!data[key]}
                   onChange={(e) =>
-                    updatePlanDeCharge(
-                      key as keyof WizardData,
-                      e.target.checked as any,
-                    )
+                    updatePlanDeCharge(key, e.target.checked as any)
                   }
                   className="h-4 w-4 accent-teal-600"
                 />
@@ -1166,7 +1590,6 @@ export default function MedicalEntityEmailWizard({
           </div>
         </div>
 
-        {/* ── Prescriptions tableau ── */}
         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
           <h3 className="mb-3 text-sm font-semibold text-gray-800">
             Prescriptions (Durées & délais)
@@ -1216,17 +1639,32 @@ export default function MedicalEntityEmailWizard({
             </div>
           </div>
         </div>
+
+        {/* ── AJOUTÉ : Audit commercial ── */}
+        <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-gray-800">
+            Audit commercial
+          </h3>
+          <textarea
+            value={data.supplierCommercialAudit}
+            onChange={(e) =>
+              updatePlanDeCharge("supplierCommercialAudit", e.target.value)
+            }
+            rows={4}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            placeholder="Ex : Offre conforme aux exigences du cahier des charges. Prix compétitifs."
+          />
+        </div>
       </div>
     );
   }
 
-  // ── ÉTAPE 2 : CONTENU EMAIL ────────────────────────────────────────────────
   function renderStep2() {
     return (
       <div className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
-            Objet de l'email *
+            Objet de l&apos;email *
           </label>
           <input
             type="text"
@@ -1234,7 +1672,11 @@ export default function MedicalEntityEmailWizard({
             onChange={(e) =>
               setData((prev) => ({ ...prev, emailSubject: e.target.value }))
             }
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${errors.emailSubject ? "border-red-400 focus:border-red-400 focus:ring-red-300" : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"}`}
+            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+              errors.emailSubject
+                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+            }`}
             placeholder="Saisir l'objet de l'email"
           />
           <FieldError message={errors.emailSubject} />
@@ -1250,7 +1692,11 @@ export default function MedicalEntityEmailWizard({
               setData((prev) => ({ ...prev, emailBody: e.target.value }))
             }
             rows={8}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${errors.emailBody ? "border-red-400 focus:border-red-400 focus:ring-red-300" : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"}`}
+            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+              errors.emailBody
+                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+            }`}
             placeholder="Saisir le message"
           />
           <FieldError message={errors.emailBody} />
@@ -1266,7 +1712,11 @@ export default function MedicalEntityEmailWizard({
               setData((prev) => ({ ...prev, emailSignature: e.target.value }))
             }
             rows={4}
-            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${errors.emailSignature ? "border-red-400 focus:border-red-400 focus:ring-red-300" : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"}`}
+            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+              errors.emailSignature
+                ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+            }`}
             placeholder={
               "Ex :\nMohamed Yacine\nAgent commercial\nMon Entreprise"
             }
@@ -1277,38 +1727,9 @@ export default function MedicalEntityEmailWizard({
     );
   }
 
-  // ── ÉTAPE 3 : PIÈCES JOINTES MULTIPLES ───────────────────────────────────
   function renderStep3() {
-    const docTypes: { type: AttachmentType; label: string }[] = [
-      { type: "technical_sheet", label: "Fiches techniques" },
-      { type: "conformity_certificate", label: "Certificats conformité" },
-      { type: "origin_certificate", label: "Certificat d'origine" },
-      {
-        type: "manufacturing_certificate",
-        label: "Certificat de fabrication Algérienne",
-      },
-      { type: "user_manual", label: "Manuel d'utilisateur" },
-      { type: "catalog", label: "Catalogues" },
-      { type: "sample", label: "Échantillons" },
-      { type: "other", label: "Autre document" },
-    ];
-
-    // Ajout bulk sans spécification de type
-    function addMultipleAttachments(files: FileList | null) {
-      if (!files) return;
-      Array.from(files).forEach(addAttachment);
-    }
-
-    function removeAttachment(index: number) {
-      setData((prev) => ({
-        ...prev,
-        attachments: prev.attachments.filter((_, i) => i !== index),
-      }));
-    }
-
     return (
       <div className="space-y-4">
-        {/* Zone unique */}
         <label className="block cursor-pointer">
           <div className="rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center transition hover:border-teal-400 hover:bg-teal-50/30">
             <div className="mb-2 text-3xl">📎</div>
@@ -1327,14 +1748,15 @@ export default function MedicalEntityEmailWizard({
               accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp"
               className="hidden"
               onChange={(e) => {
-                addMultipleAttachments(e.target.files);
+                if (e.target.files) {
+                  Array.from(e.target.files).forEach(addAttachment);
+                }
                 e.target.value = "";
               }}
             />
           </div>
         </label>
 
-        {/* Liste des fichiers */}
         {data.attachments.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -1380,7 +1802,6 @@ export default function MedicalEntityEmailWizard({
     );
   }
 
-  // ── ÉTAPE 4 : DESTINATAIRES ────────────────────────────────────────────────
   function renderStep4() {
     return (
       <div className="space-y-4">
@@ -1464,8 +1885,8 @@ export default function MedicalEntityEmailWizard({
                     }`}
                   >
                     {recipient.name
-                      .split(" ")
-                      .map((w) => w[0])
+                      ?.split(" ")
+                      .map((w: string) => w[0])
                       .join("")
                       .toUpperCase()
                       .slice(0, 2)}
@@ -1516,7 +1937,6 @@ export default function MedicalEntityEmailWizard({
     );
   }
 
-  // ── ÉTAPE 5 : VÉRIFICATION ─────────────────────────────────────────────────
   function renderStep5() {
     const resolvedSubject = applyTemplateVariables(
       data.emailSubject,
@@ -1529,11 +1949,10 @@ export default function MedicalEntityEmailWizard({
 
     return (
       <div className="space-y-4">
-        {/* Entité */}
         <section className="rounded-xl border border-gray-200 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800">
-              1. Entité médicale
+              1. Entité médicale &amp; en-tête
             </h3>
             <button
               type="button"
@@ -1552,12 +1971,22 @@ export default function MedicalEntityEmailWizard({
             {[
               ["Nom", data.medicalEntity.name],
               ["Type", data.medicalEntity.type],
-              ["Spécialité", data.medicalEntity.speciality],
               ["Ville", data.medicalEntity.city],
               ["Adresse", data.medicalEntity.address || "—"],
               ["Téléphone", data.medicalEntity.phone || "—"],
               ["Email", data.medicalEntity.email],
               ["Contact", data.medicalEntity.contactPerson],
+              ["Nom commercial", data.commercialName || "—"],
+              ["N° consultation", data.consultationNumber || "—"],
+              ["Établissement", data.establishment || "—"],
+              ["Wilaya", data.wilaya || "—"],
+              ["Lieu de dépôt", data.depositLocation || "—"],
+              ["Type procédure", data.procedureType || "—"],
+              ["Date dépôt hôpital", data.hospitalDepositDate || "—"],
+              [
+                "Date dépôt service technique",
+                data.technicalDepartmentDepositDate || "—",
+              ],
             ].map(([label, val]) => (
               <p key={label as string} className="text-gray-600">
                 <span className="font-medium text-gray-800">{label} :</span>{" "}
@@ -1566,8 +1995,6 @@ export default function MedicalEntityEmailWizard({
             ))}
           </div>
         </section>
-
-        {/* Plan de charge */}
         <section className="rounded-xl border border-gray-200 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800">
@@ -1582,15 +2009,24 @@ export default function MedicalEntityEmailWizard({
             </button>
           </div>
           <div className="grid grid-cols-1 gap-1.5 text-xs md:grid-cols-2">
+            <div className="mb-3 space-y-1.5">
+              {data.lots.map((lot, idx) => (
+                <p key={idx} className="text-xs text-gray-600">
+                  <span className="font-medium text-gray-800">
+                    Lot {lot.number} :
+                  </span>{" "}
+                  {lot.object}
+                </p>
+              ))}
+            </div>
             {[
-              ["Lot n°", data.lotNumber],
-              ["Objet", data.lotObject],
               ["Garantie", data.warrantyDuration || "—"],
               ["Livraison", data.deliveryDelay || "—"],
               ["S.A.V", data.savDuration || "—"],
               ["Intervention", data.interventionDelay || "—"],
               ["Formation", data.trainingDuration || "—"],
               ["Localités S.A.V", data.savLocations || "—"],
+              ["Audit commercial", data.supplierCommercialAudit || "—"],
             ].map(([label, val]) => (
               <p key={label as string} className="text-gray-600">
                 <span className="font-medium text-gray-800">{label} :</span>{" "}
@@ -1637,7 +2073,6 @@ export default function MedicalEntityEmailWizard({
           </div>
         </section>
 
-        {/* Email */}
         <section className="rounded-xl border border-gray-200 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800">
@@ -1663,7 +2098,6 @@ export default function MedicalEntityEmailWizard({
           </div>
         </section>
 
-        {/* Pièces jointes */}
         <section className="rounded-xl border border-gray-200 p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800">
@@ -1692,7 +2126,6 @@ export default function MedicalEntityEmailWizard({
           )}
         </section>
 
-        {/* Destinataires */}
         <section className="rounded-xl border border-gray-200 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800">

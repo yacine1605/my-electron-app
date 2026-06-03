@@ -11,6 +11,7 @@ import { ProtectedRoute } from "@/layouts/ProtectedRoute";
 
 import AccountProfilPage from "@/electron/components/Bpu/AccountantUserPage";
 import DashboardAccountantPage from "@/electron/components/Bpu/DashboardAccountantPage";
+import DashboardTechiniquePage from "@/electron/components/Bpu/DashboardTechiniquePage";
 import SuppliersPage from "@/electron/components/modoleC/Suppliers";
 import DistributorsPage from "@/electron/components/modoleC/DistributorsPage";
 import ProductsPage from "@/electron/components/modoleC/ProduitsPage";
@@ -148,7 +149,7 @@ function App() {
           <Route element={<ProtectedRoute role="technique" />}>
             <Route path="/technique" element={<TechniqueLayout />}>
               <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<DashboardAccountantPage />} />
+              <Route path="dashboard" element={<DashboardTechiniquePage />} />
               <Route path="offers/new" element={<MedicalEntityEmailWizard />} />
               <Route path="user" element={<AccountProfilPage />} />
               <Route path="offers/exports" element={<OfferExportsPage />} />
@@ -173,7 +174,7 @@ function App() {
               <Route path="distributors" element={<DistributorsPage />} />
 
               <Route path="stats" element={<div>Statistiques</div>} />
-              <Route path="settings" element={<div>Admin Settings</div>} />
+              <Route path="user" element={<AccountProfilPage />} />
             </Route>
           </Route>
 

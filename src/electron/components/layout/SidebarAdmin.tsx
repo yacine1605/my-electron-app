@@ -108,9 +108,9 @@ const navItems: NavItem[] = [
     group: "Paramètres",
   },
   {
-    label: "Paramètres",
+    label: "Admin",
     icon: <Settings className="w-5 h-5" />,
-    path: "/admin/settings",
+    path: "/admin/user",
     group: "Paramètres",
   },
 ];
