@@ -183,74 +183,71 @@ export default function OfferExportsPage() {
                     statusConfig[item.offerStatus || "draft"] ||
                     statusConfig.draft;
                   const StatusIcon = st.icon;
+
+                  // ← SUPPRIME le console.log ici
+
                   return (
-                    <>
-                      {console.log(item)}
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-4 p-4 hover:bg-gray-50/60 transition-colors"
-                      >
-                        <div className="shrink-0 p-2.5 bg-emerald-50 text-emerald-600 rounded-lg">
-                          <FileSpreadsheet className="w-5 h-5" />
-                        </div>
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-4 p-4 hover:bg-gray-50/60 transition-colors"
+                    >
+                      <div className="shrink-0 p-2.5 bg-emerald-50 text-emerald-600 rounded-lg">
+                        <FileSpreadsheet className="w-5 h-5" />
+                      </div>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-gray-900 text-sm truncate">
-                              {item.fileName}
-                            </span>
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${st.color}`}
-                            >
-                              <StatusIcon className="w-3 h-3" />
-                              {st.label}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                            {item.medicalEntityName && (
-                              <span className="flex items-center gap-1">
-                                <Building2 className="w-3 h-3" />
-                                {item.medicalEntityName}
-                              </span>
-                            )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-gray-900 text-sm truncate">
+                            {item.fileName}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${st.color}`}
+                          >
+                            <StatusIcon className="w-3 h-3" />
+                            {st.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          {item.medicalEntityName && (
                             <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {new Date(item.createdAt).toLocaleString(
-                                "fr-FR",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                },
-                              )}
+                              <Building2 className="w-3 h-3" />
+                              {item.medicalEntityName}
                             </span>
-                          </div>
-                        </div>
-
-                        <div className="shrink-0 flex items-center gap-2">
-                          <button
-                            onClick={() =>
-                              navigate(`../offer/liste/${item.offerId}`)
-                            }
-                            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                          >
-                            Voir l'offre
-                          </button>
-                          <a
-                            href={getExportDownloadUrl(
-                              `/api/excel/download/${item.offerId}/${item.fileName}`,
-                            )}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            Télécharger
-                          </a>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(item.createdAt).toLocaleString("fr-FR", {
+                              day: "2-digit",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
                         </div>
                       </div>
-                    </>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            navigate(`../offer/liste/${item.offerId}`)
+                          }
+                          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                          Voir l'offre
+                        </button>
+                        <a
+                          href={getExportDownloadUrl(
+                            `/api/excel/download/${item.offerId}/${item.fileName}`,
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Télécharger
+                        </a>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { apiClient } from "./apiClient";
+import { API_BASE_URL, apiClient } from "./apiClient";
 
 export interface OfferItem {
   id: string;
@@ -227,23 +227,26 @@ export function useOfferComparison(offerId: string | undefined) {
 
   const handleExport = useCallback(async () => {
     if (!offerId) return;
+
     safeSet(setExporting, true);
+
     try {
-      const json = await apiClient.post(`offers/${offerId}/export`).json<{
-        success: boolean;
-        data: { fileUrl: string; fileName: string };
-        message?: string;
-      }>();
+      const json = await apiClient
+        .post(`offers/${offerId}/export`, { timeout: false })
+        .json<{
+          data: {
+            fileUrl: string;
+            fileName: string;
+          };
+          message?: string;
+        }>();
 
       if (json.success && json.data.fileUrl) {
-        const a = document.createElement("a");
-        a.href = json.data.fileUrl;
-        a.download = json.data.fileName || `offre-${offerId}.xlsx`;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        const downloadUrl = json.data.fileUrl.startsWith("http")
+          ? json.data.fileUrl
+          : `${API_BASE_URL}${json.data.fileUrl}`;
+
+        window.open(downloadUrl, "_blank", "noopener,noreferrer");
       } else {
         safeSet(setError, json.message ?? "Erreur lors de l'export");
       }
