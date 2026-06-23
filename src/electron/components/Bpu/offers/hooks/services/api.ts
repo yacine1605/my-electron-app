@@ -8,6 +8,7 @@ const API_BASE = "https://api.digitservz.dz";
 /* ───────────────────────────────────────────
    TYPES
    ─────────────────────────────────────────── */
+
 export interface OfferExportRecord {
   id: string;
   fileName: string;
@@ -16,8 +17,15 @@ export interface OfferExportRecord {
   offerId: string;
   offerTitle: string | null;
   medicalEntityName: string | null;
+  offerStatus:
+    | "draft"
+    | "pending"
+    | "sent"
+    | "partial_failed"
+    | "failed"
+    | "completed"
+    | null;
 }
-
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;

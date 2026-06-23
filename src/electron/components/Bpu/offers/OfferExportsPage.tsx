@@ -182,6 +182,7 @@ export default function OfferExportsPage() {
                   const st =
                     statusConfig[item.offerStatus || "draft"] ||
                     statusConfig.draft;
+
                   const StatusIcon = st.icon;
 
                   // ← SUPPRIME le console.log ici
@@ -237,7 +238,8 @@ export default function OfferExportsPage() {
                         </button>
                         <a
                           href={getExportDownloadUrl(
-                            `/api/excel/download/${item.offerId}/${item.fileName}`,
+                            item.filePath ||
+                              `/api/excel/download/${item.offerId}/${item.fileName}`,
                           )}
                           target="_blank"
                           rel="noreferrer"
