@@ -1,52 +1,48 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "./apiClient";
 
+/* ═══════════════════════════════════════════════════════════════════
+   SCHEMA-DRIVEN TYPES — alignés avec drizzle schema
+   ═══════════════════════════════════════════════════════════════════ */
+
 export interface MedicalEntity {
   id: string;
   name: string;
   type: string;
-  speciality: string;
   address: string | null;
   city: string;
   phone: string | null;
+  phone2: string | null;
   email: string;
   contactPerson: string;
-  recipientsCount: number;
+  serviceToContact: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-interface Offer {
-  offerRecipients: any;
-  medicalEntity: any;
+export interface OfferLot {
   id: string;
-  title: string | null;
-  status: "draft" | "pending" | "validated" | "rejected" | "sent" | "completed";
-  entityName: string;
-  entityType: string;
-  city: string;
-  recipientsCount: number;
-  createdAt: string;
-  hasAttachment: boolean;
-}
-
-// ── FIX: StatsData no longer has nested `data` ──
-interface StatsData {
-  total: number;
-  pending: number;
-  draft: number;
-  failed: number;
-}
-
-export interface Recipient {
-  id: string;
-  name: string;
-  email: string;
-}
-
-export interface OfferRecipient {
-  id: string;
-  recipient: Recipient;
+  offerId: string;
+  lotNumber: string;
+  lotObject: string;
+  technicalDocuments: {
+    hasTechnicalSheet: boolean;
+    hasConformityCertificate: boolean;
+    hasOriginCertificate: boolean;
+    hasManufacturingCertificate: boolean;
+    hasCatalog: boolean;
+    hasUserManual: boolean;
+    hasSample: boolean;
+  };
+  clientRequirements: {
+    particularPrescriptions: string;
+    warrantyDuration: string;
+    deliveryDelay: string;
+    savDuration: string;
+    interventionDelay: string;
+    savLocations: string;
+    trainingDuration: string;
+  };
 }
 
 export type OfferStatus =
@@ -57,30 +53,123 @@ export type OfferStatus =
   | "failed"
   | "completed";
 
+export type ProcedureType = "appel_offre" | "consultation";
+
+export interface Recipient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export interface OfferRecipient {
+  id: string;
+  recipientId: string;
+  recipient: Recipient;
+  status: "pending" | "sent" | "failed";
+  errorMessage: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface OfferAttachment {
+  id: string;
+  offerId: string;
+  fileName: string;
+  filePath: string;
+  attachmentType: string;
+  mimeType: string | null;
+  fileSize: number | null;
+  createdAt: string;
+}
+
+/* ── Réponse API /offers (liste) ── */
 export interface OfferSummary {
   id: string;
   title: string;
   status: OfferStatus;
   emailSubject: string;
+  emailBody: string;
+  emailSignature: string;
   sentAt: string | null;
   createdAt: string;
   updatedAt: string | null;
+  medicalEntityId: string;
   medicalEntity: Pick<MedicalEntity, "id" | "name" | "city" | "type">;
   offerRecipients: OfferRecipient[];
-}
-
-export interface OfferDetail extends OfferSummary {
-  emailBody: string;
-  emailSignature: string;
-  selectedTemplateId: string | null;
   attachmentName: string | null;
-  attachment: string | null;
   attachmentPath: string | null;
   attachmentMimeType: string | null;
   attachmentSize: number | null;
   attachmentUrl: string | null;
-  medicalEntity: MedicalEntity;
+  hasAttachment: boolean;
 }
+
+/* ── Détail complet /offers/:id ── */
+export interface OfferDetail extends OfferSummary {
+  /* ── En-tête ── */
+  commercialName: string | null;
+  consultationNumber: string | null;
+  establishment: string | null;
+  wilaya: string | null;
+  depositLocation: string | null;
+  procedureType: ProcedureType | null;
+  hospitalDepositDate: string | null;
+  technicalDepartmentDepositDate: string | null;
+
+  /* ── Documents requis (checkboxes) ── */
+  hasTechnicalSheet: boolean | null;
+  hasConformityCertificate: boolean | null;
+  hasOriginCertificate: boolean | null;
+  hasManufacturingCertificate: boolean | null;
+  hasUserManual: boolean | null;
+  hasCatalog: boolean | null;
+  hasSample: boolean | null;
+
+  /* ── Prescriptions ── */
+  warrantyDuration: string | null;
+  deliveryDelay: string | null;
+  savDuration: string | null;
+  interventionDelay: string | null;
+  savLocations: string | null;
+  trainingDuration: string | null;
+
+  /* ── Suivi commercial ── */
+  maintenanceWorkshop: string | null;
+  availableTechnicalMeans: string | null;
+  proformaInvoice: string | null;
+  paymentSchedule: string | null;
+  discountObtained: string | null;
+  offerExpirationDate: string | null;
+  ddpConditions: string | null;
+
+  /* ── Suivi Dossier (PVs & Cautions) ── */
+  siteVisitPv: boolean | null;
+  pliOpeningPv: boolean | null;
+  provisionalAttributionPv: boolean | null;
+  definitiveAttributionPv: boolean | null;
+  justiceFolder: boolean | null;
+  submissionBond: boolean | null;
+  goodExecutionBond: boolean | null;
+
+  /* ── Relations ── */
+  medicalEntity: MedicalEntity;
+  lots: OfferLot[];
+  offerAttachments: OfferAttachment[];
+  supplierCommercialAudit: string | null;
+}
+
+/* ── Stats ── */
+export interface StatsData {
+  total: number;
+  pending: number;
+  draft: number;
+  failed: number;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FETCHERS
+   ═══════════════════════════════════════════════════════════════════ */
 
 async function fetchJson<T>(url: string): Promise<T> {
   const json = await apiClient
@@ -96,6 +185,10 @@ async function fetchStats(): Promise<StatsData> {
   return fetchJson<StatsData>("offers/stats");
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   HOOKS
+   ═══════════════════════════════════════════════════════════════════ */
+
 export function useOffers() {
   return useQuery<OfferSummary[]>({
     queryKey: ["offers"],
@@ -103,10 +196,11 @@ export function useOffers() {
   });
 }
 
+/* ── RESTAURÉ : utilisé par DashboardAccountantPage.tsx ── */
 export function useOfferst() {
-  return useQuery<Offer[]>({
+  return useQuery<OfferSummary[]>({
     queryKey: ["offers", "list"],
-    queryFn: () => fetchJson<Offer[]>("offers"),
+    queryFn: () => fetchJson<OfferSummary[]>("offers"),
     staleTime: 30_000,
   });
 }

@@ -164,7 +164,6 @@ function App() {
           <Route element={<ProtectedRoute role="admin" />}>
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Navigate to="offers" replace />} />
-
               <Route path="users" element={<AgentsPage />} />
               <Route path="suppliers" element={<SuppliersPage />} />
               <Route path="products" element={<ProductsPage />} />
@@ -172,7 +171,6 @@ function App() {
               <Route path="payments" element={<InvoicesPage />} />
               <Route path="offers" element={<OffersLayoutAdmin />} />
               <Route path="distributors" element={<DistributorsPage />} />
-
               <Route path="stats" element={<div>Statistiques</div>} />
               <Route path="user" element={<AccountProfilPage />} />
             </Route>

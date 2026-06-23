@@ -234,6 +234,7 @@ export function useOfferComparison(offerId: string | undefined) {
       const json = await apiClient
         .post(`offers/${offerId}/export`, { timeout: false })
         .json<{
+          success: boolean;
           data: {
             fileUrl: string;
             fileName: string;
@@ -315,8 +316,7 @@ export function useOfferComparison(offerId: string | undefined) {
     [offerId],
   );
 
-  // ── ADD THIS ──
-  // Auto-load comparison data when offerId is available
+  // ── Auto-load comparison data when offerId is available ──
   useEffect(() => {
     loadComparison();
   }, [loadComparison]);

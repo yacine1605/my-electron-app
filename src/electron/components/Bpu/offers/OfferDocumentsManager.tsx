@@ -37,7 +37,28 @@ function formatFileSize(size: number | null) {
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} Ko`;
   return `${(size / (1024 * 1024)).toFixed(1)} Mo`;
 }
+async function downloadFile(url: string, filename: string) {
+  try {
+    // Remove leading /api since apiClient base URL already includes it
+    const apiPath = url.startsWith("/api/") ? url.slice(5) : url;
 
+    const response = await apiClient.get(apiPath);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error("Erreur téléchargement:", error);
+    alert("Erreur lors du téléchargement du fichier");
+  }
+}
 function getAllFilesFromFolder(
   folder: OfferDocumentFolder,
 ): OfferDocumentFile[] {
@@ -307,12 +328,13 @@ export default function OfferDocumentsManager({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <a
-                    href={`https://api.digitservz.dz${file.downloadUrl}`}
+                  <button
+                    type="button"
+                    onClick={() => downloadFile(file.downloadUrl, file.name)}
                     className="rounded-lg bg-blue-600 px-3 py-1 text-sm text-white"
                   >
                     Télécharger
-                  </a>
+                  </button>
 
                   {isCustomFolder && file.folderFileId && (
                     <button

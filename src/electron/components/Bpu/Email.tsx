@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useOfferStore } from "@/lib/hooks/useOffre";
@@ -16,8 +14,10 @@ type MedicalEntity = {
   address: string;
   city: string;
   phone: string;
+  phone2: string;
   email: string;
   contactPerson: string;
+  serviceToContact: string;
 };
 
 type AttachmentType =
@@ -25,27 +25,35 @@ type AttachmentType =
   | "conformity_certificate"
   | "origin_certificate"
   | "manufacturing_certificate"
-  | "user_manual"
   | "catalog"
+  | "quantitative_estimate"
+  | "user_manual"
   | "sample"
   | "other";
 
 type AttachmentFile = { file: File; type: AttachmentType };
 
-type ExtractedTenderLot = { number: string; object: string };
-
+type ExtractedTenderLot = {
+  number: string;
+  object: string;
+  detailQuantitatifPages?: number[] | null;
+  excelBase64?: string | null;
+  excelFileName?: string | null;
+};
 type ExtractedTender = {
   title?: string | null;
   tenderNumber?: string | null;
   name_organization?: string | null;
   type_organization?: string | null;
   ministry?: string | null;
+  direction?: string | null;
+  email?: string | null;
   wilaya?: string | null;
   address?: string | null;
   phone?: string | null;
-  email?: string | null;
   year?: string | null;
   procedureType?: "appel_offre" | "consultation" | null;
+  depositLocation?: string | null;
   lots?: ExtractedTenderLot[];
 };
 
@@ -57,6 +65,35 @@ type ExtractedDocument = {
 
 type Recipient = { id?: string; name: string; email: string; role?: string };
 
+type TechnicalDocument = {
+  hasTechnicalSheet: boolean;
+  hasConformityCertificate: boolean;
+  hasOriginCertificate: boolean;
+  hasManufacturingCertificate: boolean;
+  hasCatalog: boolean;
+  hasUserManual: boolean;
+  hasSample: boolean;
+};
+
+type ClientRequirement = {
+  particularPrescriptions: string;
+  warrantyDuration: string;
+  deliveryDelay: string;
+  savDuration: string;
+  interventionDelay: string;
+  savLocations: string;
+  trainingDuration: string;
+};
+
+type LotWithDetails = {
+  number: string;
+  object: string;
+  technicalDocuments: TechnicalDocument;
+  clientRequirements: ClientRequirement;
+  excelBase64?: string | null;
+  excelFileName?: string | null;
+};
+
 type WizardData = {
   offerTitle: string;
   medicalEntity: MedicalEntity;
@@ -64,38 +101,32 @@ type WizardData = {
   emailBody: string;
   emailSignature: string;
   recipients: Recipient[];
-
-  lots: ExtractedTenderLot[];
-
+  lots: LotWithDetails[];
   lotNumber: string;
   lotObject: string;
-
-  // ── En-tête plan de charge / offre ──
-  commercialName: string; // ← AJOUTÉ
-  consultationNumber: string; // ← AJOUTÉ
-  establishment: string; // ← AJOUTÉ
-  wilaya: string; // ← AJOUTÉ
-  depositLocation: string; // ← AJOUTÉ
-  procedureType: "appel_offre" | "consultation" | null; // ← AJOUTÉ
-  hospitalDepositDate: string; // ← AJOUTÉ
-  technicalDepartmentDepositDate: string; // ← AJOUTÉ
-
-  warrantyDuration: string;
-  deliveryDelay: string;
-  savDuration: string;
-  interventionDelay: string;
-  savLocations: string;
-  trainingDuration: string;
-  supplierCommercialAudit: string; // ← AJOUTÉ
-
-  hasTechnicalSheet: boolean;
-  hasConformityCertificate: boolean;
-  hasOriginCertificate: boolean;
-  hasManufacturingCertificate: boolean;
-  hasUserManual: boolean;
-  hasCatalog: boolean;
-  hasSample: boolean;
-
+  commercialName: string;
+  consultationNumber: string;
+  establishment: string;
+  wilaya: string;
+  depositLocation: string;
+  procedureType: "appel_offre" | "consultation" | null;
+  hospitalDepositDate: string;
+  technicalDepartmentDepositDate: string;
+  maintenanceWorkshop: string;
+  availableTechnicalMeans: string;
+  proformaInvoice: string;
+  paymentSchedule: string;
+  discountObtained: string;
+  offerExpirationDate: string;
+  ddpConditions: string;
+  siteVisitPV: boolean;
+  pliOpeningPV: boolean;
+  provisionalAttributionPV: boolean;
+  definitiveAttributionPV: boolean;
+  justiceFolder: boolean;
+  submissionBond: boolean;
+  goodExecutionBond: boolean;
+  supplierCommercialAudit: string;
   attachments: AttachmentFile[];
 };
 
@@ -146,6 +177,7 @@ const STEPS = [
 const ATTACHMENT_LABELS: Record<AttachmentType, string> = {
   technical_sheet: "Fiches techniques",
   conformity_certificate: "Certificats conformité",
+  quantitative_estimate: "Détail quantitatif et estimatif",
   origin_certificate: "Certificat d'origine",
   manufacturing_certificate: "Certificat de fabrication Algérienne",
   user_manual: "Manuel d'utilisateur",
@@ -166,6 +198,26 @@ const ALLOWED_MIME_TYPES = [
   "image/webp",
 ];
 
+const defaultTechnicalDocuments: TechnicalDocument = {
+  hasTechnicalSheet: false,
+  hasConformityCertificate: false,
+  hasOriginCertificate: false,
+  hasManufacturingCertificate: false,
+  hasCatalog: false,
+  hasUserManual: false,
+  hasSample: false,
+};
+
+const defaultClientRequirements: ClientRequirement = {
+  particularPrescriptions: "",
+  warrantyDuration: "",
+  deliveryDelay: "",
+  savDuration: "",
+  interventionDelay: "",
+  savLocations: "",
+  trainingDuration: "",
+};
+
 const initialData: WizardData = {
   offerTitle: "",
   medicalEntity: {
@@ -174,8 +226,10 @@ const initialData: WizardData = {
     address: "",
     city: "",
     phone: "",
+    phone2: "",
     email: "",
     contactPerson: "",
+    serviceToContact: "",
   },
   emailSubject: "Relance concernant notre échange avec {{entityName}}",
   emailBody: `Bonjour {{contactPerson}},
@@ -190,8 +244,6 @@ Dans l'attente de votre retour, nous vous prions d'agréer, {{contactPerson}}, l
   lots: [],
   lotNumber: "",
   lotObject: "",
-
-  // ── AJOUTÉ ──
   commercialName: "",
   consultationNumber: "",
   establishment: "",
@@ -200,27 +252,29 @@ Dans l'attente de votre retour, nous vous prions d'agréer, {{contactPerson}}, l
   procedureType: null,
   hospitalDepositDate: "",
   technicalDepartmentDepositDate: "",
+  maintenanceWorkshop: "",
+  availableTechnicalMeans: "",
+  proformaInvoice: "",
+  paymentSchedule: "",
+  discountObtained: "",
+  offerExpirationDate: "",
+  ddpConditions: "",
+  siteVisitPV: false,
+  pliOpeningPV: false,
+  provisionalAttributionPV: false,
+  definitiveAttributionPV: false,
+  justiceFolder: false,
+  submissionBond: false,
+  goodExecutionBond: false,
   supplierCommercialAudit: "",
-
-  warrantyDuration: "",
-  deliveryDelay: "",
-  savDuration: "",
-  interventionDelay: "",
-  savLocations: "",
-  trainingDuration: "",
-
-  hasTechnicalSheet: false,
-  hasConformityCertificate: false,
-  hasOriginCertificate: false,
-  hasManufacturingCertificate: false,
-  hasUserManual: false,
-  hasCatalog: false,
-  hasSample: false,
   attachments: [],
 };
 
 /* ─── Utilities ─────────────────────────────────────────────────────────── */
-
+function buildAddress(tender?: ExtractedTender | null): string {
+  if (!tender) return "";
+  return [tender.address, tender.direction].filter(Boolean).join(" — ");
+}
 function applyTemplateVariables(text: string, entity: MedicalEntity): string {
   return text
     .replace(/\{\{entityName\}\}/g, entity.name || "votre établissement")
@@ -255,13 +309,15 @@ function buildFormData(data: WizardData, sourceOfferId?: string): FormData {
     emailBody: data.emailBody,
     emailSignature: data.emailSignature,
     recipientIds: data.recipients.map((r) => r.id).filter(Boolean),
-    supplierIds: [], // ← AJOUTÉ (Zod attend un tableau)
-
-    lots: data.lots,
+    supplierIds: [],
+    lots: data.lots.map((lot) => ({
+      number: lot.number,
+      object: lot.object,
+      technicalDocuments: lot.technicalDocuments,
+      clientRequirements: lot.clientRequirements,
+    })),
     lotNumber: data.lotNumber,
     lotObject: data.lotObject,
-
-    // ── AJOUTÉ ──
     commercialName: data.commercialName,
     consultationNumber: data.consultationNumber,
     establishment: data.establishment,
@@ -270,21 +326,21 @@ function buildFormData(data: WizardData, sourceOfferId?: string): FormData {
     procedureType: data.procedureType,
     hospitalDepositDate: data.hospitalDepositDate || null,
     technicalDepartmentDepositDate: data.technicalDepartmentDepositDate || null,
+    maintenanceWorkshop: data.maintenanceWorkshop,
+    availableTechnicalMeans: data.availableTechnicalMeans,
+    proformaInvoice: data.proformaInvoice,
+    paymentSchedule: data.paymentSchedule,
+    discountObtained: data.discountObtained,
+    offerExpirationDate: data.offerExpirationDate,
+    ddpConditions: data.ddpConditions,
+    siteVisitPV: data.siteVisitPV,
+    pliOpeningPV: data.pliOpeningPV,
+    provisionalAttributionPV: data.provisionalAttributionPV,
+    definitiveAttributionPV: data.definitiveAttributionPV,
+    justiceFolder: data.justiceFolder,
+    submissionBond: data.submissionBond,
+    goodExecutionBond: data.goodExecutionBond,
     supplierCommercialAudit: data.supplierCommercialAudit,
-
-    warrantyDuration: data.warrantyDuration,
-    deliveryDelay: data.deliveryDelay,
-    savDuration: data.savDuration,
-    interventionDelay: data.interventionDelay,
-    savLocations: data.savLocations,
-    trainingDuration: data.trainingDuration,
-    hasTechnicalSheet: data.hasTechnicalSheet,
-    hasConformityCertificate: data.hasConformityCertificate,
-    hasOriginCertificate: data.hasOriginCertificate,
-    hasManufacturingCertificate: data.hasManufacturingCertificate,
-    hasUserManual: data.hasUserManual,
-    hasCatalog: data.hasCatalog,
-    hasSample: data.hasSample,
   };
 
   fd.append("data", JSON.stringify(payload));
@@ -295,6 +351,29 @@ function buildFormData(data: WizardData, sourceOfferId?: string): FormData {
   });
 
   return fd;
+}
+
+function base64ToFile(
+  base64: string,
+  filename: string,
+  mimeType = "application/pdf",
+): File {
+  const byteString = atob(base64);
+  const byteArray = new Uint8Array(byteString.length);
+  for (let i = 0; i < byteString.length; i++) {
+    byteArray[i] = byteString.charCodeAt(i);
+  }
+  return new File([byteArray], filename, { type: mimeType });
+}
+
+function base64ToBlobUrl(base64: string, mimeType = "application/pdf"): string {
+  const byteString = atob(base64);
+  const byteArray = new Uint8Array(byteString.length);
+  for (let i = 0; i < byteString.length; i++) {
+    byteArray[i] = byteString.charCodeAt(i);
+  }
+  const blob = new Blob([byteArray], { type: mimeType });
+  return URL.createObjectURL(blob);
 }
 
 /* ─── Sub-components ────────────────────────────────────────────────────── */
@@ -440,6 +519,175 @@ function SendResultPanel({ result }: { result: SendResult }) {
   );
 }
 
+/* ─── Progress Indicator for PDF Analysis ───────────────────────────────── */
+function PdfAnalysisProgress({
+  progress,
+  status,
+}: {
+  progress: number;
+  status: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="inline-block h-6 w-6 animate-spin rounded-full border-3 border-teal-500 border-t-transparent" />
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">
+              Analyse du PDF en cours
+            </h3>
+            <p className="text-xs text-gray-500">
+              {status === "pending" && "Mise en file d'attente..."}
+              {status === "processing" && `Analyse par chunks... ${progress}%`}
+              {status === "completed" && "Analyse terminée !"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-2 h-3 w-full overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-full rounded-full bg-teal-500 transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <p className="text-center text-xs text-gray-400">
+          {progress < 100
+            ? "Ne fermez pas cette page. L'analyse peut prendre plusieurs minutes pour les gros PDFs."
+            : "Traitement final..."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Lot Excel Preview / Download ──────────────────────────────────────── */
+function LotExcelPreview({
+  base64,
+  filename,
+}: {
+  base64: string;
+  filename: string;
+}) {
+  const handleDownload = useCallback(() => {
+    const byteString = atob(base64);
+    const byteArray = new Uint8Array(byteString.length);
+    for (let i = 0; i < byteString.length; i++) {
+      byteArray[i] = byteString.charCodeAt(i);
+    }
+    const blob = new Blob([byteArray], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [base64, filename]);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">📊</span>
+          <div>
+            <h4 className="text-xs font-semibold text-gray-700">
+              DQE — Détail Quantitatif et Estimatif
+            </h4>
+            <p className="text-[10px] text-gray-500">{filename}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleDownload}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 transition flex items-center gap-1"
+        >
+          <span>⬇</span> Télécharger Excel
+        </button>
+      </div>
+      <div className="p-4 bg-gray-50/50">
+        <div className="flex items-center gap-3 text-xs text-gray-600">
+          <span className="inline-block h-8 w-8 rounded bg-green-100 text-green-700 items-center justify-center font-bold text-[10px]">
+            XLSX
+          </span>
+          <div>
+            <p className="font-medium text-gray-800">{filename}</p>
+            <p className="text-gray-500">Fichier Excel généré par l&apos;IA</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Service To Contact Select ─────────────────────────────────────────── */
+function ServiceToContactSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  // Les 3 services du tableau "Services à contacter" du formulaire papier
+  const SERVICES = [
+    { id: "pharmacie", name: "Service Pharmacie" },
+    { id: "marches", name: "Bureau des Marchés" },
+    { id: "facturation", name: "Service Facturation" },
+  ];
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
+    >
+      <option value="">— Sélectionner un service —</option>
+      {SERVICES.map((svc) => (
+        <option key={svc.id} value={svc.name}>
+          {svc.name}
+        </option>
+      ))}
+      {value && !SERVICES.some((s) => s.name === value) && (
+        <option value={value}>{value} (non listé)</option>
+      )}
+    </select>
+  );
+}
+
+/* ─── File Preview Link (attachments) ───────────────────────────────────── */
+function FilePreviewLink({ file }: { file: File }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  if (!url) return null;
+
+  const isPdf = file.type === "application/pdf";
+  const isExcel =
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    file.type === "application/vnd.ms-excel";
+
+  return (
+    <a
+      href={url}
+      target={isPdf ? "_blank" : undefined}
+      rel={isPdf ? "noopener noreferrer" : undefined}
+      download={!isPdf ? file.name : undefined}
+      className="ml-2 text-xs text-teal-600 hover:underline"
+    >
+      {isPdf ? "Voir PDF" : isExcel ? "📊 Excel" : "Télécharger"}
+    </a>
+  );
+}
+
 /* ─── Main Component ──────────────────────────────────────────────────── */
 
 type MedicalEntityEmailWizardProps = {
@@ -479,11 +727,11 @@ export default function MedicalEntityEmailWizard({
             {
               number: initialWizardData.lotNumber ?? "",
               object: initialWizardData.lotObject ?? "",
+              technicalDocuments: { ...defaultTechnicalDocuments },
+              clientRequirements: { ...defaultClientRequirements },
             },
           ]
         : [],
-
-    // ── AJOUTÉ : merge des nouveaux champs depuis initialWizardData ──
     commercialName:
       initialWizardData?.commercialName ?? initialData.commercialName,
     consultationNumber:
@@ -500,6 +748,35 @@ export default function MedicalEntityEmailWizard({
     technicalDepartmentDepositDate:
       initialWizardData?.technicalDepartmentDepositDate ??
       initialData.technicalDepartmentDepositDate,
+    maintenanceWorkshop:
+      initialWizardData?.maintenanceWorkshop ?? initialData.maintenanceWorkshop,
+    availableTechnicalMeans:
+      initialWizardData?.availableTechnicalMeans ??
+      initialData.availableTechnicalMeans,
+    proformaInvoice:
+      initialWizardData?.proformaInvoice ?? initialData.proformaInvoice,
+    paymentSchedule:
+      initialWizardData?.paymentSchedule ?? initialData.paymentSchedule,
+    discountObtained:
+      initialWizardData?.discountObtained ?? initialData.discountObtained,
+    offerExpirationDate:
+      initialWizardData?.offerExpirationDate ?? initialData.offerExpirationDate,
+    ddpConditions:
+      initialWizardData?.ddpConditions ?? initialData.ddpConditions,
+    siteVisitPV: initialWizardData?.siteVisitPV ?? initialData.siteVisitPV,
+    pliOpeningPV: initialWizardData?.pliOpeningPV ?? initialData.pliOpeningPV,
+    provisionalAttributionPV:
+      initialWizardData?.provisionalAttributionPV ??
+      initialData.provisionalAttributionPV,
+    definitiveAttributionPV:
+      initialWizardData?.definitiveAttributionPV ??
+      initialData.definitiveAttributionPV,
+    justiceFolder:
+      initialWizardData?.justiceFolder ?? initialData.justiceFolder,
+    submissionBond:
+      initialWizardData?.submissionBond ?? initialData.submissionBond,
+    goodExecutionBond:
+      initialWizardData?.goodExecutionBond ?? initialData.goodExecutionBond,
     supplierCommercialAudit:
       initialWizardData?.supplierCommercialAudit ??
       initialData.supplierCommercialAudit,
@@ -511,6 +788,8 @@ export default function MedicalEntityEmailWizard({
     null,
   );
   const [isExtractingPdf, setIsExtractingPdf] = useState(false);
+  const [pdfJobProgress, setPdfJobProgress] = useState(0);
+  const [pdfJobStatus, setPdfJobStatus] = useState<string>("");
   const [apiState, setApiState] = useState<ApiState>({ status: "idle" });
   const [toast, setToast] = useState<{
     msg: string;
@@ -574,39 +853,111 @@ export default function MedicalEntityEmailWizard({
     }
   };
 
-  /* ── Extraction PDF ── */
+  /* ════════════════════════════════════════════════════════════════════════
+     EXTRACTION PDF — NOUVEAU SYSTÈME AVEC POLLING (supporte tous les tailles)
+     ════════════════════════════════════════════════════════════════════════ */
+
   async function extractDataFromPdf(file: File) {
     if (file.type !== "application/pdf") {
       showToast("Veuillez importer un fichier PDF.", "err");
       return;
     }
-    if (file.size > 100 * 1024 * 1024) {
-      showToast("PDF trop volumineux. Taille maximale : 100 MB.", "err");
+
+    // Limite absolue : 500MB (le serveur gère le reste)
+    if (file.size > 500 * 1024 * 1024) {
+      showToast("PDF trop volumineux (>500MB). Impossible de traiter.", "err");
       return;
     }
 
     setIsExtractingPdf(true);
+    setPdfJobProgress(0);
+    setPdfJobStatus("pending");
+
+    let pollInterval: NodeJS.Timeout | null = null;
+
     try {
+      // ── Étape 1 : Upload du PDF ──
       const formData = new FormData();
       formData.append("file", file);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      showToast("Upload du PDF en cours...", "info");
 
-      const res = await fetch(`${API_BASE}/ai/extract-tender`, {
+      const uploadRes = await fetch(`${API_BASE}/ai/extract-tender`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: formData,
-        signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      const uploadJson = await uploadRes.json();
+      if (!uploadRes.ok || !uploadJson.success) {
+        throw new Error(uploadJson.message || "Erreur lors de l'upload.");
+      }
 
-      const json = await res.json();
-      if (!res.ok)
-        throw new Error(json.message ?? "Erreur pendant l'extraction.");
+      const { jobId } = uploadJson.data;
+      console.log(`[PDF] Job created: ${jobId}`);
 
-      const extracted: ExtractedDocument = json.data;
+      // ── Étape 2 : Polling du statut ──
+      const result = await new Promise<any>((resolve, reject) => {
+        let attempts = 0;
+        const MAX_ATTEMPTS = 300; // 25 minutes max (poll every 5s)
+
+        pollInterval = setInterval(async () => {
+          attempts++;
+
+          if (attempts > MAX_ATTEMPTS) {
+            clearInterval(pollInterval!);
+            reject(
+              new Error(
+                "L'analyse a dépassé le temps maximum (25 minutes). Le fichier est peut-être trop complexe.",
+              ),
+            );
+            return;
+          }
+
+          try {
+            const statusRes = await fetch(
+              `${API_BASE}/ai/extract-tender/status/${jobId}`,
+              { headers: getAuthHeaders() },
+            );
+
+            if (!statusRes.ok) {
+              if (statusRes.status === 404) {
+                clearInterval(pollInterval!);
+                reject(new Error("Job expiré ou non trouvé."));
+                return;
+              }
+              return; // Retry next poll
+            }
+
+            const statusJson = await statusRes.json();
+            const { status, progress, result, error } = statusJson.data;
+
+            // Mise à jour de l'UI
+            setPdfJobStatus(status);
+            setPdfJobProgress(progress || 0);
+
+            if (status === "completed") {
+              clearInterval(pollInterval!);
+              resolve(result);
+            }
+
+            if (status === "failed") {
+              clearInterval(pollInterval!);
+              reject(
+                new Error(
+                  error ||
+                    "L'analyse a échoué. Vérifiez que le PDF est valide.",
+                ),
+              );
+            }
+          } catch (pollError) {
+            console.warn("[PDF Poll] Network error, retrying...", pollError);
+          }
+        }, 5000); // Poll toutes les 5 secondes
+      });
+
+      // ── Traiter le résultat ──
+      const extracted: ExtractedDocument = result;
 
       if (
         extracted.documentType !== "TENDER" &&
@@ -617,13 +968,24 @@ export default function MedicalEntityEmailWizard({
       }
 
       setExtractedData(extracted);
-      showToast("PDF analysé avec succès. Formulaire rempli.", "ok");
+      showToast(
+        `PDF analysé avec succès ! ${extracted.tender?.lots?.length || 0} lot(s) détecté(s).`,
+        "ok",
+      );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erreur inconnue.";
-      showToast(`Erreur extraction PDF : ${message}`, "err");
+      let message = "Erreur inconnue.";
+
+      if (error instanceof Error) {
+        message = error.message;
+      }
+
+      showToast(`Erreur extraction PDF : ${message}`, "err", 15000);
+      console.error("Erreur extraction PDF :", message);
     } finally {
+      if (pollInterval) clearInterval(pollInterval);
       setIsExtractingPdf(false);
+      setPdfJobProgress(0);
+      setPdfJobStatus("");
     }
   }
 
@@ -639,24 +1001,56 @@ export default function MedicalEntityEmailWizard({
     ) {
       const tender = extractedData.tender;
       const lots = tender?.lots ?? [];
+      const lotAttachments: AttachmentFile[] = lots
+        .filter((l) => !!l.excelBase64)
+        .map((l, idx) => ({
+          file: base64ToFile(
+            l.excelBase64 as string,
+            l.excelFileName || `DQE_Lot_${l.number || idx + 1}.xlsx`,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          ),
+          type: "quantitative_estimate" as AttachmentType,
+        }));
 
       setData((prev) => ({
         ...prev,
         offerTitle: tender?.title || prev.offerTitle,
-        consultationNumber: tender?.tenderNumber || prev.consultationNumber, // ← AJOUTÉ
-        procedureType: tender?.procedureType || prev.procedureType, // ← AJOUTÉ
+        consultationNumber: tender?.tenderNumber || prev.consultationNumber,
+        procedureType: tender?.procedureType || prev.procedureType,
+        depositLocation: tender?.depositLocation || prev.depositLocation,
         ...(lots.length > 0
           ? syncPrimaryLot(
               lots.map((l) => ({
                 number: l.number,
                 object: l.object,
+                technicalDocuments: { ...defaultTechnicalDocuments },
+                clientRequirements: { ...defaultClientRequirements },
+                excelBase64: l.excelBase64,
+                excelFileName: l.excelFileName,
               })),
             )
           : {}),
         lots:
           lots.length > 0
-            ? lots.map((l) => ({ number: l.number, object: l.object }))
+            ? lots.map((l) => ({
+                number: l.number,
+                object: l.object,
+                technicalDocuments: { ...defaultTechnicalDocuments },
+                clientRequirements: { ...defaultClientRequirements },
+                excelBase64: l.excelBase64,
+                excelFileName: l.excelFileName,
+              }))
             : prev.lots,
+        attachments: (() => {
+          if (lotAttachments.length === 0) return prev.attachments;
+          const existingNames = new Set(
+            prev.attachments.map((a) => a.file.name),
+          );
+          const newAttachments = lotAttachments.filter(
+            (a) => !existingNames.has(a.file.name),
+          );
+          return [...prev.attachments, ...newAttachments];
+        })(),
         medicalEntity: {
           ...prev.medicalEntity,
           name: tender?.name_organization || prev.medicalEntity.name,
@@ -665,14 +1059,15 @@ export default function MedicalEntityEmailWizard({
             detectEntityType(tender?.name_organization) ||
             prev.medicalEntity.type,
           city: tender?.wilaya || prev.medicalEntity.city,
-          address: tender?.address || prev.medicalEntity.address,
+          address: buildAddress(tender) || prev.medicalEntity.address,
           phone: tender?.phone || prev.medicalEntity.phone,
           email: tender?.email || prev.medicalEntity.email,
           contactPerson:
             extractContactPerson(tender?.name_organization) ||
             prev.medicalEntity.contactPerson,
+          serviceToContact:
+            tender?.direction || prev.medicalEntity.serviceToContact,
         },
-        // ── AJOUTÉ ──
         wilaya: tender?.wilaya || prev.wilaya,
         establishment: tender?.name_organization || prev.establishment,
       }));
@@ -762,9 +1157,12 @@ export default function MedicalEntityEmailWizard({
         errs.name = "Le nom de l'entité est obligatoire.";
       if (!data.medicalEntity.type.trim())
         errs.type = "Le type d'entité est obligatoire.";
-
       if (!data.medicalEntity.city.trim())
         errs.city = "La ville est obligatoire.";
+      if (!data.medicalEntity.phone.trim())
+        errs.phone = "Le numéro de téléphone est obligatoire.";
+      if (!data.medicalEntity.phone2.trim())
+        errs.phone2 = "Le deuxième numéro de téléphone est obligatoire.";
       if (!data.medicalEntity.email.trim())
         errs.email = "L'email de l'entité est obligatoire.";
       else if (!isValidEmail(data.medicalEntity.email))
@@ -847,7 +1245,7 @@ export default function MedicalEntityEmailWizard({
   }
 
   /* ── Lots management ──────────────────────────────────────────────────── */
-  function syncPrimaryLot(lots: ExtractedTenderLot[]) {
+  function syncPrimaryLot(lots: LotWithDetails[]) {
     return {
       lotNumber: lots[0]?.number ?? "",
       lotObject: lots[0]?.object ?? "",
@@ -856,7 +1254,15 @@ export default function MedicalEntityEmailWizard({
 
   function addLot() {
     setData((prev) => {
-      const lots = [...prev.lots, { number: "", object: "" }];
+      const lots = [
+        ...prev.lots,
+        {
+          number: "",
+          object: "",
+          technicalDocuments: { ...defaultTechnicalDocuments },
+          clientRequirements: { ...defaultClientRequirements },
+        },
+      ];
       return { ...prev, lots, ...syncPrimaryLot(lots) };
     });
   }
@@ -879,6 +1285,48 @@ export default function MedicalEntityEmailWizard({
         ...syncPrimaryLot(lots),
       };
     });
+  }
+
+  function updateLotTechnicalDocument(
+    lotIndex: number,
+    docKey: keyof TechnicalDocument,
+    value: boolean,
+  ) {
+    setData((prev) => ({
+      ...prev,
+      lots: prev.lots.map((lot, i) =>
+        i === lotIndex
+          ? {
+              ...lot,
+              technicalDocuments: {
+                ...lot.technicalDocuments,
+                [docKey]: value,
+              },
+            }
+          : lot,
+      ),
+    }));
+  }
+
+  function updateLotClientRequirement(
+    lotIndex: number,
+    reqKey: keyof ClientRequirement,
+    value: string,
+  ) {
+    setData((prev) => ({
+      ...prev,
+      lots: prev.lots.map((lot, i) =>
+        i === lotIndex
+          ? {
+              ...lot,
+              clientRequirements: {
+                ...lot.clientRequirements,
+                [reqKey]: value,
+              },
+            }
+          : lot,
+      ),
+    }));
   }
 
   /* ── Recipients ────────────────────────────────────────────────────── */
@@ -939,11 +1387,7 @@ export default function MedicalEntityEmailWizard({
       setCurrentOfferId(result.offerId);
       setOfferTitle(data.offerTitle);
 
-      showToast(
-        // `${result.sent}/${result.total} email(s) envoyé(s)`,
-        result.failed === 0 ? "ok" : "warn",
-        // 6000,
-      );
+      showToast(result.failed === 0 ? "ok" : "warn");
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Erreur inconnue";
       setApiState({ status: "error", message: errMsg });
@@ -996,9 +1440,18 @@ export default function MedicalEntityEmailWizard({
               {
                 number: prev.lotNumber,
                 object: prev.lotObject,
+                technicalDocuments: { ...defaultTechnicalDocuments },
+                clientRequirements: { ...defaultClientRequirements },
               },
             ]
-          : [{ number: "", object: "" }];
+          : [
+              {
+                number: "",
+                object: "",
+                technicalDocuments: { ...defaultTechnicalDocuments },
+                clientRequirements: { ...defaultClientRequirements },
+              },
+            ];
 
       return {
         ...prev,
@@ -1066,28 +1519,6 @@ export default function MedicalEntityEmailWizard({
               placeholder="Ex : Acquisition équipements médicaux"
             />
           </div>
-
-          {data.lots.length > 0 && (
-            <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50 p-4">
-              <p className="mb-3 text-sm font-semibold text-blue-800">
-                Lots détectés ({data.lots.length})
-              </p>
-              <div className="space-y-2">
-                {data.lots.map((lot, idx) => (
-                  <div
-                    key={`${lot.number}-${idx}`}
-                    className="rounded-lg border border-blue-100 bg-white p-3"
-                  >
-                    <div className="font-medium text-blue-800">
-                      Lot {lot.number}
-                    </div>
-                    <div className="text-sm text-gray-700">{lot.object}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {extractedData?.documentType && (
             <div className="md:col-span-2 flex items-center gap-2">
               <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-medium text-teal-700">
@@ -1101,7 +1532,6 @@ export default function MedicalEntityEmailWizard({
             </div>
           )}
 
-          {/* ── ENTITÉ MÉDICALE ── */}
           <div className="md:col-span-2">
             <h3 className="mb-2 text-sm font-semibold text-gray-800">
               Entité médicale
@@ -1177,15 +1607,38 @@ export default function MedicalEntityEmailWizard({
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              Téléphone
+              Téléphone 1 *
             </label>
             <input
               type="text"
               value={data.medicalEntity.phone}
               onChange={(e) => updateMedicalEntity("phone", e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                errors.phone
+                  ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                  : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+              }`}
               placeholder="Ex : 0550 00 00 00"
             />
+            <FieldError message={errors.phone} />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Téléphone 2 *
+            </label>
+            <input
+              type="text"
+              value={data.medicalEntity.phone2}
+              onChange={(e) => updateMedicalEntity("phone2", e.target.value)}
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
+                errors.phone2
+                  ? "border-red-400 focus:border-red-400 focus:ring-red-300"
+                  : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
+              }`}
+              placeholder="Ex : 0770 00 00 00"
+            />
+            <FieldError message={errors.phone2} />
           </div>
 
           <div>
@@ -1226,7 +1679,18 @@ export default function MedicalEntityEmailWizard({
             <FieldError message={errors.contactPerson} />
           </div>
 
-          {/* ── EN-TÊTE PLAN DE CHARGE / OFFRE ── */}
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Service à contacter
+            </label>
+            <ServiceToContactSelect
+              value={data.medicalEntity.serviceToContact}
+              onChange={(value) =>
+                updateMedicalEntity("serviceToContact", value)
+              }
+            />
+          </div>
+
           <div className="md:col-span-2 mt-2">
             <h3 className="mb-2 text-sm font-semibold text-gray-800">
               En-tête de l&apos;offre
@@ -1235,7 +1699,7 @@ export default function MedicalEntityEmailWizard({
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              Nom commercial / Raison sociale
+              Raison sociale
             </label>
             <input
               type="text"
@@ -1437,210 +1901,212 @@ export default function MedicalEntityEmailWizard({
   }
 
   function renderStep1() {
-    const docFields: {
-      key: keyof WizardData;
+    const technicalDocFields: {
+      key: keyof TechnicalDocument;
       label: string;
-      type: AttachmentType;
     }[] = [
-      {
-        key: "hasTechnicalSheet",
-        label: "Fiches techniques",
-        type: "technical_sheet",
-      },
-      {
-        key: "hasConformityCertificate",
-        label: "Certificats conformité",
-        type: "conformity_certificate",
-      },
-      {
-        key: "hasOriginCertificate",
-        label: "Certificat d'origine",
-        type: "origin_certificate",
-      },
+      { key: "hasTechnicalSheet", label: "Fiche Technique" },
+      { key: "hasConformityCertificate", label: "Certificat de Conformité" },
+      { key: "hasOriginCertificate", label: "Certificat d'Origine" },
       {
         key: "hasManufacturingCertificate",
-        label: "Certificat de fabrication Algérienne",
-        type: "manufacturing_certificate",
+        label: "Certificat de Fabrication Algérienne",
+      },
+      { key: "hasCatalog", label: "Catalogue" },
+      { key: "hasUserManual", label: "Manuel Utilisateur" },
+      { key: "hasSample", label: "Échantillon" },
+    ];
+
+    const clientReqFields: {
+      key: keyof ClientRequirement;
+      label: string;
+      placeholder: string;
+    }[] = [
+      {
+        key: "particularPrescriptions",
+        label: "Prescriptions Particulières",
+        placeholder: "Ex : Spécifications techniques particulières...",
       },
       {
-        key: "hasUserManual",
-        label: "Manuel d'utilisateur",
-        type: "user_manual",
+        key: "warrantyDuration",
+        label: "Durée de Garantie",
+        placeholder: "Ex : 12 mois",
       },
-      { key: "hasCatalog", label: "Catalogues", type: "catalog" },
-      { key: "hasSample", label: "Échantillons", type: "sample" },
+      {
+        key: "deliveryDelay",
+        label: "Délai de Livraison / Installation",
+        placeholder: "Ex : 30 jours",
+      },
+      {
+        key: "savDuration",
+        label: "Durée du S.A.V",
+        placeholder: "Ex : 24 mois",
+      },
+      {
+        key: "interventionDelay",
+        label: "Délai d'Intervention",
+        placeholder: "Ex : 48 heures",
+      },
+      {
+        key: "savLocations",
+        label: "Localités S.A.V",
+        placeholder: "Ex : Alger, Oran, Constantine",
+      },
+      {
+        key: "trainingDuration",
+        label: "Durée de Formation",
+        placeholder: "Ex : 3 jours",
+      },
     ];
 
     return (
-      <div className="space-y-5">
+      <div className="space-y-6">
         <p className="text-sm text-gray-500">
-          Renseignez les informations du Plan de charge individuel.
+          Renseignez les informations du Plan de charge individuel par lot.
         </p>
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-800">
-              Lots ({data.lots.length})
-            </h3>
-
-            <button
-              type="button"
-              onClick={addLot}
-              className="rounded-lg border border-teal-500 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-50"
+        <div className="space-y-4">
+          {data.lots.map((lot, lotIdx) => (
+            <div
+              key={lotIdx}
+              className="rounded-xl border border-gray-200 bg-white overflow-hidden"
             >
-              + Ajouter un lot
-            </button>
-          </div>
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-800">
+                  Lot {lotIdx + 1}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => removeLot(lotIdx)}
+                  className="rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
+                >
+                  Supprimer
+                </button>
+              </div>
 
-          {data.lots.length === 0 && (
-            <p className="text-xs text-gray-500">
-              Aucun lot. Cliquez sur « Ajouter un lot ».
-            </p>
-          )}
-
-          <div className="space-y-3">
-            {data.lots.map((lot, idx) => (
-              <div
-                key={idx}
-                className="rounded-lg border border-gray-200 bg-white p-3"
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-600">
-                    Lot {idx + 1}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => removeLot(idx)}
-                    className="rounded-lg px-2 py-1 text-xs text-red-500 hover:bg-red-50"
-                  >
-                    Supprimer
-                  </button>
-                </div>
-
+              <div className="p-4 space-y-5">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                       N° lot *
                     </label>
-
                     <input
                       type="text"
                       value={lot.number}
-                      onChange={(e) => updateLot(idx, "number", e.target.value)}
+                      onChange={(e) =>
+                        updateLot(lotIdx, "number", e.target.value)
+                      }
                       className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-                        errors[`lot_number_${idx}`]
+                        errors[`lot_number_${lotIdx}`]
                           ? "border-red-400 focus:border-red-400 focus:ring-red-300"
                           : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
                       }`}
                       placeholder="Ex : 04, 5"
                     />
-
-                    <FieldError message={errors[`lot_number_${idx}`]} />
+                    <FieldError message={errors[`lot_number_${lotIdx}`]} />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">
                       Objet du lot *
                     </label>
-
                     <input
                       type="text"
                       value={lot.object}
-                      onChange={(e) => updateLot(idx, "object", e.target.value)}
+                      onChange={(e) =>
+                        updateLot(lotIdx, "object", e.target.value)
+                      }
                       className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-                        errors[`lot_object_${idx}`]
+                        errors[`lot_object_${lotIdx}`]
                           ? "border-red-400 focus:border-red-400 focus:ring-red-300"
                           : "border-gray-300 focus:border-teal-500 focus:ring-teal-500"
                       }`}
                       placeholder="Ex : Équipements de laboratoire"
                     />
-
-                    <FieldError message={errors[`lot_object_${idx}`]} />
+                    <FieldError message={errors[`lot_object_${lotIdx}`]} />
                   </div>
                 </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">
+                    Documents Technique (OUI / NON)
+                  </h4>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {technicalDocFields.map(({ key, label }) => (
+                      <label
+                        key={key}
+                        className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition hover:border-teal-300"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!lot.technicalDocuments[key]}
+                          onChange={(e) =>
+                            updateLotTechnicalDocument(
+                              lotIdx,
+                              key,
+                              e.target.checked,
+                            )
+                          }
+                          className="h-4 w-4 accent-teal-600"
+                        />
+                        <span className="text-sm text-gray-700">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">
+                    Exigences du Client
+                  </h4>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {clientReqFields.map(({ key, label, placeholder }) => (
+                      <div key={key}>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">
+                          {label}
+                        </label>
+                        <input
+                          type="text"
+                          value={lot.clientRequirements[key]}
+                          onChange={(e) =>
+                            updateLotClientRequirement(
+                              lotIdx,
+                              key,
+                              e.target.value,
+                            )
+                          }
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          placeholder={placeholder}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Mini Excel Preview / Download */}
+                {lot.excelBase64 && (
+                  <LotExcelPreview
+                    base64={lot.excelBase64}
+                    filename={
+                      lot.excelFileName ||
+                      `DQE_Lot_${lot.number || lotIdx + 1}.xlsx`
+                    }
+                  />
+                )}
               </div>
-            ))}
-          </div>
-
-          <FieldError message={errors.lots} />
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-800">
-            Documents requis (cases du plan de charge)
-          </h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {docFields.map(({ key, label }) => (
-              <label
-                key={key as string}
-                className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition hover:border-teal-300"
-              >
-                <input
-                  type="checkbox"
-                  checked={!!data[key]}
-                  onChange={(e) =>
-                    updatePlanDeCharge(key, e.target.checked as any)
-                  }
-                  className="h-4 w-4 accent-teal-600"
-                />
-                <span className="text-sm text-gray-700">{label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-800">
-            Prescriptions (Durées & délais)
-          </h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {[
-              { key: "warrantyDuration", label: "Durée de garantie" },
-              {
-                key: "deliveryDelay",
-                label: "Délai de livraison / installation",
-              },
-              { key: "savDuration", label: "Durée de S.A.V" },
-              { key: "interventionDelay", label: "Délai d'intervention" },
-              { key: "trainingDuration", label: "Durée de formation" },
-            ].map(({ key, label }) => (
-              <div key={key}>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  {label}
-                </label>
-                <input
-                  type="text"
-                  value={data[key as keyof WizardData] as string}
-                  onChange={(e) =>
-                    updatePlanDeCharge(
-                      key as keyof WizardData,
-                      e.target.value as any,
-                    )
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                  placeholder="Ex : 12 mois"
-                />
-              </div>
-            ))}
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Localités S.A.V
-              </label>
-              <input
-                type="text"
-                value={data.savLocations}
-                onChange={(e) =>
-                  updatePlanDeCharge("savLocations", e.target.value)
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                placeholder="Ex : Alger, Oran, Constantine"
-              />
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* ── AJOUTÉ : Audit commercial ── */}
+        <button
+          type="button"
+          onClick={addLot}
+          className="w-full rounded-lg border border-teal-500 px-4 py-3 text-sm font-medium text-teal-700 transition hover:bg-teal-50"
+        >
+          + Ajouter un lot
+        </button>
+
+        <FieldError message={errors.lots} />
         <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
           <h3 className="mb-3 text-sm font-semibold text-gray-800">
             Audit commercial
@@ -1779,12 +2245,20 @@ export default function MedicalEntityEmailWizard({
                 key={i}
                 className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2.5"
               >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-800">
-                    {att.file.name}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center">
+                    <p className="truncate text-sm font-medium text-gray-800">
+                      {att.file.name}
+                    </p>
+                    <FilePreviewLink file={att.file} />
+                  </div>
                   <p className="text-xs text-gray-500">
                     {(att.file.size / 1024 / 1024).toFixed(2)} MB
+                    {att.type !== "other" && (
+                      <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+                        {ATTACHMENT_LABELS[att.type]}
+                      </span>
+                    )}
                   </p>
                 </div>
                 <button
@@ -1973,9 +2447,14 @@ export default function MedicalEntityEmailWizard({
               ["Type", data.medicalEntity.type],
               ["Ville", data.medicalEntity.city],
               ["Adresse", data.medicalEntity.address || "—"],
-              ["Téléphone", data.medicalEntity.phone || "—"],
+              ["Téléphone 1", data.medicalEntity.phone || "—"],
+              ["Téléphone 2", data.medicalEntity.phone2 || "—"],
               ["Email", data.medicalEntity.email],
               ["Contact", data.medicalEntity.contactPerson],
+              [
+                "Service à contacter",
+                data.medicalEntity.serviceToContact || "—",
+              ],
               ["Nom commercial", data.commercialName || "—"],
               ["N° consultation", data.consultationNumber || "—"],
               ["Établissement", data.establishment || "—"],
@@ -1995,10 +2474,11 @@ export default function MedicalEntityEmailWizard({
             ))}
           </div>
         </section>
+
         <section className="rounded-xl border border-gray-200 p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800">
-              2. Plan de charge individuel
+              2. Plan de charge individuel ({data.lots.length} lot(s))
             </h3>
             <button
               type="button"
@@ -2008,24 +2488,113 @@ export default function MedicalEntityEmailWizard({
               Modifier
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-1.5 text-xs md:grid-cols-2">
-            <div className="mb-3 space-y-1.5">
-              {data.lots.map((lot, idx) => (
-                <p key={idx} className="text-xs text-gray-600">
-                  <span className="font-medium text-gray-800">
-                    Lot {lot.number} :
-                  </span>{" "}
-                  {lot.object}
+
+          {data.lots.map((lot, lotIdx) => (
+            <div
+              key={lotIdx}
+              className="mb-4 rounded-lg border border-gray-100 bg-gray-50/50 p-3"
+            >
+              <h4 className="text-xs font-semibold text-gray-800 mb-2">
+                Lot {lotIdx + 1} — {lot.number} : {lot.object}
+                {lot.excelBase64 && (
+                  <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] text-teal-700">
+                    📊 DQE Excel
+                  </span>
+                )}
+              </h4>
+
+              {/* Documents Technique */}
+              <div className="mb-2">
+                <p className="text-xs font-medium text-gray-700 mb-1">
+                  Documents Technique :
                 </p>
-              ))}
+                <div className="flex flex-wrap gap-1">
+                  {lot.technicalDocuments.hasTechnicalSheet && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      Fiche Technique
+                    </span>
+                  )}
+                  {lot.technicalDocuments.hasConformityCertificate && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      Conformité
+                    </span>
+                  )}
+                  {lot.technicalDocuments.hasOriginCertificate && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      Origine
+                    </span>
+                  )}
+                  {lot.technicalDocuments.hasManufacturingCertificate && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      Fabrication DZ
+                    </span>
+                  )}
+                  {lot.technicalDocuments.hasCatalog && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      Catalogue
+                    </span>
+                  )}
+                  {lot.technicalDocuments.hasUserManual && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      Manuel
+                    </span>
+                  )}
+                  {lot.technicalDocuments.hasSample && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      Échantillon
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Exigences du Client */}
+              <div className="grid grid-cols-1 gap-1 text-xs md:grid-cols-2">
+                {[
+                  [
+                    "Prescriptions Particulières",
+                    lot.clientRequirements.particularPrescriptions || "—",
+                  ],
+                  [
+                    "Durée de Garantie",
+                    lot.clientRequirements.warrantyDuration || "—",
+                  ],
+                  [
+                    "Délai de Livraison",
+                    lot.clientRequirements.deliveryDelay || "—",
+                  ],
+                  ["Durée du S.A.V", lot.clientRequirements.savDuration || "—"],
+                  [
+                    "Délai d'Intervention",
+                    lot.clientRequirements.interventionDelay || "—",
+                  ],
+                  [
+                    "Localités S.A.V",
+                    lot.clientRequirements.savLocations || "—",
+                  ],
+                  [
+                    "Durée de Formation",
+                    lot.clientRequirements.trainingDuration || "—",
+                  ],
+                ].map(([label, val]) => (
+                  <p key={label} className="text-gray-600">
+                    <span className="font-medium text-gray-800">{label} :</span>{" "}
+                    {val}
+                  </p>
+                ))}
+              </div>
             </div>
+          ))}
+
+          {/* Informations Commerciales */}
+          <div className="mt-3 grid grid-cols-1 gap-1.5 text-xs md:grid-cols-2">
             {[
-              ["Garantie", data.warrantyDuration || "—"],
-              ["Livraison", data.deliveryDelay || "—"],
-              ["S.A.V", data.savDuration || "—"],
-              ["Intervention", data.interventionDelay || "—"],
-              ["Formation", data.trainingDuration || "—"],
-              ["Localités S.A.V", data.savLocations || "—"],
+              ["Atelier de Maintenance", data.maintenanceWorkshop || "—"],
+              ["Moyens Techniques", data.availableTechnicalMeans || "—"],
+              ["Facture Proforma", data.proformaInvoice || "—"],
+              ["Échéancier Paiement", data.paymentSchedule || "—"],
+              ["Remise Obtenue", data.discountObtained || "—"],
+              ["Date Expiration", data.offerExpirationDate || "—"],
+              ["Conditions DDP", data.ddpConditions || "—"],
               ["Audit commercial", data.supplierCommercialAudit || "—"],
             ].map(([label, val]) => (
               <p key={label as string} className="text-gray-600">
@@ -2034,40 +2603,42 @@ export default function MedicalEntityEmailWizard({
               </p>
             ))}
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {data.hasTechnicalSheet && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                Fiches techniques
+
+          {/* Suivi du Dossier */}
+          <div className="mt-3 flex flex-wrap gap-1">
+            {data.siteVisitPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Visite Site
               </span>
             )}
-            {data.hasConformityCertificate && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                Conformité
+            {data.pliOpeningPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Ouverture Plis
               </span>
             )}
-            {data.hasOriginCertificate && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                Origine
+            {data.provisionalAttributionPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Attribution Provisoire
               </span>
             )}
-            {data.hasManufacturingCertificate && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                Fabrication DZ
+            {data.definitiveAttributionPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Attribution Définitive
               </span>
             )}
-            {data.hasUserManual && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                Manuel
+            {data.justiceFolder && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                Dossier Justice
               </span>
             )}
-            {data.hasCatalog && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                Catalogues
+            {data.submissionBond && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                Caution Soumission
               </span>
             )}
-            {data.hasSample && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                Échantillons
+            {data.goodExecutionBond && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                Caution Bonne Exécution
               </span>
             )}
           </div>
@@ -2120,6 +2691,11 @@ export default function MedicalEntityEmailWizard({
                   <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
                   {att.file.name} ({(att.file.size / 1024 / 1024).toFixed(2)}{" "}
                   MB)
+                  {att.type !== "other" && (
+                    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
+                      {ATTACHMENT_LABELS[att.type]}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -2223,7 +2799,7 @@ export default function MedicalEntityEmailWizard({
           onJump={handleJump}
         />
 
-        <div className="min-h-[320px] rounded-2xl border border-gray-200 p-5">
+        <div className="min-h-80 rounded-2xl border border-gray-200 p-5">
           {renderStepContent()}
         </div>
 

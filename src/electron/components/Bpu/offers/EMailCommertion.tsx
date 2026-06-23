@@ -45,7 +45,35 @@ const STEPS = [
 const initialData: WizardData = {
   emailSubject: "Demande Proforma",
   emailBody:
-    " Bonjour,\n\nVeuillez trouver ci-joint notre demande de proforma pour l'offre commerciale.\n\nCordialement.",
+    "Bonjour,\n\n" +
+    "Veuillez trouver ci-joint notre demande de proforma pour l'offre commerciale.\n\n" +
+    "Merci de bien vouloir compléter le tableau ci-dessous et nous le retourner :\n\n" +
+    "═══════════════════════════════════════════════════════════════════════════\n" +
+    "DOCUMENTS TECHNIQUE\n" +
+    "═══════════════════════════════════════════════════════════════════════════\n\n" +
+    "DOCUMENT                          | OUI | NON | OBSERVATIONS\n" +
+    "───────────────────────────────────────────────────────────────────────────\n" +
+    "Fiche Technique                   | [ ] | [ ] | _________________________\n" +
+    "Certificat de Conformité          | [ ] | [ ] | _________________________\n" +
+    "Certificat d'Origine              | [ ] | [ ] | _________________________\n" +
+    "Certificat de Fabrication Algérienne | [ ] | [ ] | _________________________\n" +
+    "Catalogue                         | [ ] | [ ] | _________________________\n" +
+    "Manuel Utilisateur                | [ ] | [ ] | _________________________\n" +
+    "Échantillon                       | [ ] | [ ] | _________________________\n\n" +
+    "═══════════════════════════════════════════════════════════════════════════\n" +
+    "EXIGENCES DU CLIENT\n" +
+    "═══════════════════════════════════════════════════════════════════════════\n\n" +
+    "RUBRIQUE                          | INFORMATIONS\n" +
+    "───────────────────────────────────────────────────────────────────────────\n" +
+    "Prescriptions Particulières       | _______________________________________\n" +
+    "Durée de Garantie                 | _______________________________________\n" +
+    "Délai de Livraison / Installation | _______________________________________\n" +
+    "Durée du S.A.V                    | _______________________________________\n" +
+    "Délai d'Intervention              | _______________________________________\n" +
+    "Localités S.A.V                   | _______________________________________\n" +
+    "Durée de Formation                | _______________________________________\n\n" +
+    "═══════════════════════════════════════════════════════════════════════════\n\n" +
+    "Cordialement.",
   attachments: [],
   recipients: [],
 };

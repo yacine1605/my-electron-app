@@ -7,26 +7,15 @@ import {
   Layers,
   ClipboardCheck,
   ShieldCheck,
-  Calendar,
   Building2,
-  MapPin,
-  FileBadge,
-  Clock,
-  Wrench,
-  GraduationCap,
-  MapPinned,
-  Stethoscope,
-  Briefcase,
-  Hash,
-  FileSearch,
+  ScrollText,
   CheckCircle2,
   XCircle,
-  Gavel,
-  ScrollText,
+  Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useOffer } from "@/lib/hooks/Useoffers";
+import { useOffer, type OfferDetail } from "@/lib/hooks/Useoffers";
 
 /* ─── Helpers ─────────────────────────────────────────────────────────── */
 
@@ -39,13 +28,22 @@ function formatDate(dateStr: string | null | undefined): string {
   });
 }
 
-function formatProcedureType(type: string | null | undefined): string {
+function formatProcedureType(
+  type: OfferDetail["procedureType"] | null | undefined,
+): string {
   if (!type) return "—";
   const map: Record<string, string> = {
     appel_offre: "Appel d'offres",
     consultation: "Consultation",
   };
   return map[type] || type;
+}
+
+function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes || bytes === 0) return "—";
+  const mb = bytes / 1024 / 1024;
+  if (mb < 0.01) return "< 0.01 MB";
+  return `${mb.toFixed(2)} MB`;
 }
 
 /* ─── Sub-components ──────────────────────────────────────────────────── */
@@ -61,7 +59,7 @@ function Info({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function BadgeYesNo({ value }: { value?: boolean }) {
+function BadgeYesNo({ value }: { value?: boolean | null }) {
   if (value === undefined || value === null) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
@@ -83,7 +81,13 @@ function BadgeYesNo({ value }: { value?: boolean }) {
   );
 }
 
-function DocBadge({ label, present }: { label: string; present?: boolean }) {
+function DocBadge({
+  label,
+  present,
+}: {
+  label: string;
+  present?: boolean | null;
+}) {
   return (
     <div
       className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
@@ -94,6 +98,66 @@ function DocBadge({ label, present }: { label: string; present?: boolean }) {
     >
       <span className="font-medium">{label}</span>
       <BadgeYesNo value={present} />
+    </div>
+  );
+}
+
+function AttachmentCard({
+  attachment,
+}: {
+  attachment: OfferDetail["offerAttachments"][number];
+}) {
+  const downloadUrl = attachment.filePath
+    ? `https://api.digitservz.dz${attachment.filePath}`
+    : null;
+
+  const getFileIcon = (mimeType: string | null) => {
+    if (!mimeType) return <FileText className="h-5 w-5 text-emerald-700" />;
+    if (mimeType.includes("pdf"))
+      return <FileText className="h-5 w-5 text-red-500" />;
+    if (mimeType.includes("image"))
+      return <FileText className="h-5 w-5 text-blue-500" />;
+    if (
+      mimeType.includes("spreadsheet") ||
+      mimeType.includes("excel") ||
+      mimeType.includes("csv")
+    )
+      return <FileText className="h-5 w-5 text-green-600" />;
+    if (mimeType.includes("word") || mimeType.includes("document"))
+      return <FileText className="h-5 w-5 text-blue-700" />;
+    return <FileText className="h-5 w-5 text-emerald-700" />;
+  };
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+      <div className="flex items-start gap-3">
+        {getFileIcon(attachment.mimeType)}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-emerald-900">
+            {attachment.fileName}
+          </p>
+          <div className="mt-1 flex items-center gap-2 text-xs text-emerald-700">
+            <span>{formatFileSize(attachment.fileSize)}</span>
+            {attachment.attachmentType &&
+              attachment.attachmentType !== "other" && (
+                <>
+                  <span>•</span>
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium">
+                    {attachment.attachmentType}
+                  </span>
+                </>
+              )}
+          </div>
+        </div>
+      </div>
+      {downloadUrl && (
+        <Button asChild className="mt-4 w-full" variant="outline" size="sm">
+          <a href={downloadUrl} target="_blank" rel="noreferrer">
+            <Download className="mr-2 h-4 w-4" />
+            Télécharger
+          </a>
+        </Button>
+      )}
     </div>
   );
 }
@@ -122,9 +186,25 @@ export default function OfferDetailsPage() {
     );
   }
 
-  const attachmentUrl = offer.attachmentUrl
-    ? `https://api.digitservz.dz${offer.attachmentUrl}`
-    : null;
+  // ── Pièces jointes : priorité à offerAttachments (multiple), fallback sur l'ancien champ ──
+  const attachments = offer.offerAttachments?.length
+    ? offer.offerAttachments
+    : offer.attachmentUrl
+      ? [
+          {
+            id: "legacy",
+            offerId: offer.id,
+            fileName: offer.attachmentName ?? "Pièce jointe",
+            filePath: offer.attachmentUrl,
+            attachmentType: offer.attachmentMimeType?.includes("pdf")
+              ? "cahier_charge"
+              : "other",
+            mimeType: offer.attachmentMimeType,
+            fileSize: offer.attachmentSize,
+            createdAt: offer.createdAt,
+          } satisfies OfferDetail["offerAttachments"][number],
+        ]
+      : [];
 
   return (
     <>
@@ -163,7 +243,7 @@ export default function OfferDetailsPage() {
           </div>
         </div>
 
-        {/* ── Row 1: Entité médicale + Pièce jointe ────────────── */}
+        {/* ── Row 1: Entité médicale + Pièces jointes ────────────── */}
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Entité médicale */}
           <section className="rounded-2xl border border-slate-200 p-5">
@@ -187,38 +267,31 @@ export default function OfferDetailsPage() {
             </div>
           </section>
 
-          {/* Pièce jointe */}
+          {/* Pièces jointes */}
           <section className="rounded-2xl border border-slate-200 p-5">
             <div className="mb-4 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-slate-700" />
+              <Paperclip className="h-5 w-5 text-slate-700" />
               <h2 className="text-lg font-semibold text-slate-900">
-                Pièce jointe
+                Pièces jointes
+                {attachments.length > 0 && (
+                  <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-sm font-normal text-slate-500">
+                    {attachments.length}
+                  </span>
+                )}
               </h2>
             </div>
-            {offer.attachmentName && attachmentUrl ? (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <div className="flex items-start gap-3">
-                  <FileText className="mt-0.5 h-5 w-5 text-emerald-700" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-emerald-900">
-                      {offer.attachmentName}
-                    </p>
-                    <p className="mt-1 text-xs text-emerald-700">
-                      {(offer.attachmentSize / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                </div>
-                <Button asChild className="mt-4 w-full" variant="outline">
-                  <a href={attachmentUrl} target="_blank" rel="noreferrer">
-                    <Download className="mr-2 h-4 w-4" />
-                    Télécharger le PDF
-                  </a>
-                </Button>
-              </div>
-            ) : (
+            {attachments.length === 0 ? (
               <p className="text-sm text-slate-500">
                 Aucune pièce jointe disponible.
               </p>
+            ) : attachments.length === 1 ? (
+              <AttachmentCard attachment={attachments[0]} />
+            ) : (
+              <div className="space-y-3">
+                {attachments.map((attachment) => (
+                  <AttachmentCard key={attachment.id} attachment={attachment} />
+                ))}
+              </div>
             )}
           </section>
         </div>
@@ -269,7 +342,7 @@ export default function OfferDetailsPage() {
             </p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {offer.lots.map((lot: any) => (
+              {offer.lots.map((lot) => (
                 <div
                   key={lot.id}
                   className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm transition-colors hover:border-slate-200 hover:bg-slate-100"
@@ -287,7 +360,7 @@ export default function OfferDetailsPage() {
         {/* ── Row 4: Documents requis (has_*) ──────────────────── */}
         <section className="mt-5 rounded-2xl border border-slate-200 p-5">
           <div className="mb-4 flex items-center gap-2">
-            <FileBadge className="h-5 w-5 text-slate-700" />
+            <FileText className="h-5 w-5 text-slate-700" />
             <h2 className="text-lg font-semibold text-slate-900">
               Documents requis
             </h2>
@@ -373,7 +446,7 @@ export default function OfferDetailsPage() {
             <p className="text-sm text-slate-500">Aucun destinataire.</p>
           ) : (
             <div className="space-y-2">
-              {offer.offerRecipients.map((recipient: any) => (
+              {offer.offerRecipients.map((recipient) => (
                 <div
                   key={recipient.id}
                   className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm"

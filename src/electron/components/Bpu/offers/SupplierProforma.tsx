@@ -23,6 +23,7 @@ type SupplierResponse = {
   emailFrom: string | null;
   emailSubject: string | null;
   status: string;
+  emailText: string | null; // ← ADD THIS
   isNegativeResponse: boolean;
   negativeReason: string | null;
   receivedAt: string;
@@ -70,7 +71,16 @@ export default function OfferResponsesPage({ offerId }: { offerId?: string }) {
   const [expandedAttachments, setExpandedAttachments] = useState<Set<string>>(
     new Set(),
   );
+  const [expandedEmails, setExpandedEmails] = useState<Set<string>>(new Set());
 
+  const toggleEmail = (responseId: string) => {
+    setExpandedEmails((prev) => {
+      const next = new Set(prev);
+      if (next.has(responseId)) next.delete(responseId);
+      else next.add(responseId);
+      return next;
+    });
+  };
   const toggleAttachments = (responseId: string) => {
     setExpandedAttachments((prev) => {
       const next = new Set(prev);
@@ -217,7 +227,42 @@ export default function OfferResponsesPage({ offerId }: { offerId?: string }) {
                     Détails
                   </button>
                 </div>
+                {r.emailText && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => toggleEmail(r.id)}
+                      className="flex w-full items-center justify-between rounded-lg border bg-gray-50 px-3 py-2 text-left hover:bg-gray-100 transition-colors"
+                    >
+                      <span className="text-sm font-semibold">
+                        Corps de l'email
+                      </span>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`text-gray-500 transition-transform duration-200 ${
+                          expandedEmails.has(r.id) ? "rotate-180" : ""
+                        }`}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
 
+                    {expandedEmails.has(r.id) && (
+                      <div className="mt-2 rounded-lg border bg-white p-4">
+                        <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
+                          {r.emailText}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* ─── PIÈCES JOINTES REPLIABLES ─── */}
                 {r.attachments && r.attachments.length > 0 && (
                   <div className="mt-4">

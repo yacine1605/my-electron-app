@@ -549,6 +549,9 @@ function CollapsibleItemRow({
                     Prix U. HT
                   </th>
                   <th className="px-3 py-2 text-center font-medium text-gray-600">
+                    TVA
+                  </th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-600">
                     Qté
                   </th>
                   <th className="px-3 py-2 text-center font-medium text-gray-600">
@@ -618,6 +621,24 @@ function CollapsibleItemRow({
                       {si.data
                         ? `${si.data.unitPriceHT.toLocaleString("fr-FR")} DZD`
                         : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {si.data ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="font-mono text-sm text-gray-700">
+                            {si.data.tvaPercentage.toFixed(0)}%
+                          </span>
+                          <span className="text-[10px] text-gray-400">
+                            {(
+                              (si.data.unitPriceHT * si.data.tvaPercentage) /
+                              100
+                            ).toLocaleString("fr-FR")}{" "}
+                            DZD
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-center text-gray-600">
                       {si.data ? (si.data.quantityOffered ?? "—") : "—"}
@@ -812,6 +833,18 @@ function SupplierItemCard({
           <div className="text-gray-400">Prix U. HT</div>
           <div className="font-mono font-medium">
             {si.data.unitPriceHT.toLocaleString("fr-FR")} DZD
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-400">
+            TVA ({si.data.tvaPercentage.toFixed(0)}%)
+          </div>
+          <div className="font-mono font-medium">
+            {(
+              (si.data.unitPriceHT * si.data.tvaPercentage) /
+              100
+            ).toLocaleString("fr-FR")}{" "}
+            DZD
           </div>
         </div>
         <div>
