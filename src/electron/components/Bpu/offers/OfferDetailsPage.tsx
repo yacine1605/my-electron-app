@@ -208,6 +208,7 @@ export default function OfferDetailsPage() {
 
   return (
     <>
+      {console.log("helll", offer)}
       <div className="min-h-full bg-white p-6">
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="mb-6 flex flex-col gap-4 border-b pb-5 md:flex-row md:items-start md:justify-between">
