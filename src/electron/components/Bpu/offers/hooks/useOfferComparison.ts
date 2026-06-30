@@ -77,7 +77,14 @@ export interface MissingItem {
   itemName: string;
   onlineSuppliers: string[];
 }
-
+export interface UserSelection {
+  id: string;
+  offerItemId: string;
+  supplierId: string;
+  supplierName: string;
+  selectedAt: Date;
+  notes: string | null;
+}
 export function useOfferComparison(offerId: string | undefined) {
   const [data, setData] = useState<ComparisonData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -132,7 +139,58 @@ export function useOfferComparison(offerId: string | undefined) {
       progressInterval.current = null;
     }
   }, []);
+  const [selections, setSelections] = useState<Map<string, UserSelection>>(
+    new Map(),
+  );
+  const [selectionsLoading, setSelectionsLoading] = useState(false);
 
+  // ── Load user selections ──
+  const loadSelections = useCallback(async () => {
+    if (!offerId) return;
+    setSelectionsLoading(true);
+    try {
+      const json = await apiClient
+        .get(`offers/${offerId}/selections`)
+        .json<{ success: boolean; data: UserSelection[] }>();
+      if (json.success) {
+        const map = new Map<string, UserSelection>();
+        json.data.forEach((sel) => {
+          map.set(sel.offerItemId, sel);
+        });
+        safeSet(setSelections, map);
+      }
+    } catch (err) {
+      console.error("Erreur chargement sélections:", err);
+    } finally {
+      safeSet(setSelectionsLoading, false);
+    }
+  }, [offerId, safeSet]);
+
+  // ── Save selection ──
+  const saveSelection = useCallback(
+    async (offerItemId: string, supplierId: string | null) => {
+      if (!offerId) return;
+      try {
+        if (supplierId) {
+          await apiClient.post(`offers/${offerId}/selections`, {
+            json: { offerItemId, supplierId },
+          });
+        } else {
+          // Clear selection
+          await apiClient.delete(`offers/${offerId}/selections-clear`, {
+            searchParams: { offerItemId },
+          });
+        }
+        await loadSelections();
+      } catch (err: any) {
+        safeSet(setError, err.message ?? "Erreur lors de la sauvegarde");
+      }
+    },
+    [offerId, loadSelections, safeSet],
+  );
+  useEffect(() => {
+    loadSelections();
+  }, [loadSelections]);
   const loadComparison = useCallback(async () => {
     if (!offerId) return;
     safeSet(setLoading, true);
@@ -349,5 +407,9 @@ export function useOfferComparison(offerId: string | undefined) {
     searchSuppliersForItem,
     refreshMissingItems,
     regenerateMissing,
+    saveSelection, // NEW
+    loadSelections,
+    selections, // NEW
+    selectionsLoading,
   };
 }

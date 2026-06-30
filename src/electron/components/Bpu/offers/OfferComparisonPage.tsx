@@ -37,12 +37,15 @@ export default function OfferComparisonPage() {
     exporting,
     missingItems,
     searchResults,
+    selections,
+    selectionsLoading,
     loadComparison,
     startAnalysis,
     handleExport,
     searchSuppliersForItem,
     refreshMissingItems,
     regenerateMissing,
+    saveSelection,
   } = useOfferComparison(offerId);
 
   // ─── Local UI State ───
@@ -191,6 +194,31 @@ export default function OfferComparisonPage() {
               )}
             </button>
 
+            {/* Selection summary badge */}
+            {selections.size > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200 text-sm">
+                <CheckCircle2 className="w-4 h-4" />
+                <span className="font-medium">
+                  {selections.size} sélection{selections.size > 1 ? "s" : ""}{" "}
+                  manuelle
+                </span>
+                <button
+                  onClick={() => {
+                    if (
+                      confirm("Réinitialiser toutes les sélections manuelles ?")
+                    ) {
+                      selections.forEach((sel) => {
+                        saveSelection(sel.offerItemId, null);
+                      });
+                    }
+                  }}
+                  className="ml-1 text-xs text-indigo-500 hover:text-indigo-700 underline"
+                >
+                  Tout réinitialiser
+                </button>
+              </div>
+            )}
+
             <button
               onClick={handleExport}
               disabled={exporting}
@@ -259,6 +287,32 @@ export default function OfferComparisonPage() {
           </div>
         )}
 
+        {/* ─── Selection Stats Banner ─── */}
+        {data && selections.size > 0 && (
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-4">
+            <div className="flex items-center gap-4">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-indigo-900">
+                    Export personnalisé
+                  </span>
+                  <span className="px-2 py-0.5 bg-indigo-200 text-indigo-800 text-xs font-bold rounded-full">
+                    {selections.size} / {data.requestedItems.length}
+                  </span>
+                </div>
+                <p className="text-sm text-indigo-700 mt-0.5">
+                  {selections.size} article(s) avec fournisseur manuellement
+                  sélectionné. Les autres utilisent la sélection automatique
+                  (IA).
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ─── Supplier Score Cards ─── */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
           {data.suppliers.map((supplier) => (
@@ -312,9 +366,17 @@ export default function OfferComparisonPage() {
               <Package className="w-4 h-4 text-gray-500" />
               Matrice de comparaison
             </h2>
-            <span className="text-xs text-gray-500">
-              {expandedItems.size} / {filteredItems.length} articles dépliés
-            </span>
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              {selections.size > 0 && (
+                <span className="text-indigo-600 font-medium">
+                  {selections.size} sélection{selections.size > 1 ? "s" : ""}{" "}
+                  manuelle
+                </span>
+              )}
+              <span>
+                {expandedItems.size} / {filteredItems.length} articles dépliés
+              </span>
+            </div>
           </div>
 
           <div className="divide-y divide-gray-100">
@@ -332,6 +394,10 @@ export default function OfferComparisonPage() {
                   onToggle={() => toggleItem(item.id)}
                   onSearchSuppliers={() => handleOpenSupplierSearch(item)}
                   searchResult={searchResults.get(item.name)}
+                  userSelection={selections.get(item.id) || null}
+                  onSelectSupplier={(supplierId) =>
+                    saveSelection(item.id, supplierId)
+                  }
                 />
               ))
             )}
@@ -372,6 +438,8 @@ function CollapsibleItemRow({
   onToggle,
   onSearchSuppliers,
   searchResult,
+  userSelection,
+  onSelectSupplier,
 }: {
   item: OfferItem;
   suppliers: any[];
@@ -379,6 +447,8 @@ function CollapsibleItemRow({
   onToggle: () => void;
   onSearchSuppliers: () => void;
   searchResult?: any;
+  userSelection?: { supplierId: string; supplierName: string } | null;
+  onSelectSupplier?: (supplierId: string | null) => void;
 }) {
   const supplierItems = useMemo(() => {
     return suppliers.map((s) => {
@@ -447,6 +517,12 @@ function CollapsibleItemRow({
                 AUCUNE RÉPONSE
               </span>
             )}
+            {userSelection && (
+              <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                {userSelection.supplierName}
+              </span>
+            )}
           </div>
           <div className="text-xs text-gray-500 mt-0.5">
             Qté demandée : <strong>{item.requestedQuantity}</strong> •
@@ -455,6 +531,11 @@ function CollapsibleItemRow({
               {supplierItems.filter((s) => s.data).length}/{suppliers.length}{" "}
               fournisseurs ont répondu
             </span>
+            {userSelection && (
+              <span className="text-indigo-600 ml-1">
+                • Fournisseur sélectionné manuellement
+              </span>
+            )}
           </div>
         </div>
 
@@ -560,111 +641,145 @@ function CollapsibleItemRow({
                   <th className="px-3 py-2 text-center font-medium text-gray-600">
                     Technique
                   </th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-600">
+                    Sélection
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {supplierItems.map((si) => (
-                  <tr key={si.supplierId} className="hover:bg-gray-50/50">
-                    <td className="px-3 py-3 font-medium text-gray-900">
-                      {si.supplierName}
-                    </td>
-                    <td className="px-3 py-3">
-                      {si.data ? (
-                        <div>
-                          <div className="text-gray-900">
-                            {si.data.proposedName}
-                          </div>
-                          {si.data.proposedBrand && (
-                            <div className="text-xs text-gray-500">
-                              Marque : {si.data.proposedBrand}
-                            </div>
+                {supplierItems.map((si) => {
+                  const isSelected =
+                    userSelection?.supplierId === si.supplierId;
+                  return (
+                    <tr
+                      key={si.supplierId}
+                      className={`hover:bg-gray-50/50 ${isSelected ? "bg-indigo-50/50" : ""}`}
+                    >
+                      <td className="px-3 py-3 font-medium text-gray-900">
+                        <div className="flex items-center gap-2">
+                          {si.supplierName}
+                          {isSelected && (
+                            <CheckCircle2 className="w-4 h-4 text-indigo-600" />
                           )}
                         </div>
-                      ) : (
-                        <span className="text-gray-400 italic text-xs">
-                          Aucune proposition
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {si.data ? (
-                        <div className="flex flex-col items-center gap-1">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
-                              (si.data.conformityPercentage || 0) >=
-                              item.minConformityPercentage
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-red-100 text-red-700"
-                            }`}
-                          >
-                            {(si.data.conformityPercentage || 0).toFixed(0)}%
+                      </td>
+                      <td className="px-3 py-3">
+                        {si.data ? (
+                          <div>
+                            <div className="text-gray-900">
+                              {si.data.proposedName}
+                            </div>
+                            {si.data.proposedBrand && (
+                              <div className="text-xs text-gray-500">
+                                Marque : {si.data.proposedBrand}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 italic text-xs">
+                            Aucune proposition
                           </span>
-                          <div className="w-16 bg-gray-100 rounded-full h-1">
-                            <div
-                              className={`h-1 rounded-full ${
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {si.data ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
                                 (si.data.conformityPercentage || 0) >=
                                 item.minConformityPercentage
-                                  ? "bg-emerald-400"
-                                  : "bg-red-400"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-red-100 text-red-700"
                               }`}
-                              style={{
-                                width: `${si.data.conformityPercentage}%`,
-                              }}
-                            />
+                            >
+                              {(si.data.conformityPercentage || 0).toFixed(0)}%
+                            </span>
+                            <div className="w-16 bg-gray-100 rounded-full h-1">
+                              <div
+                                className={`h-1 rounded-full ${
+                                  (si.data.conformityPercentage || 0) >=
+                                  item.minConformityPercentage
+                                    ? "bg-emerald-400"
+                                    : "bg-red-400"
+                                }`}
+                                style={{
+                                  width: `${si.data.conformityPercentage}%`,
+                                }}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center font-mono text-gray-700">
-                      {si.data
-                        ? `${si.data.unitPriceHT.toLocaleString("fr-FR")} DZD`
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {si.data ? (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="font-mono text-sm text-gray-700">
-                            {si.data.tvaPercentage.toFixed(0)}%
-                          </span>
-                          <span className="text-[10px] text-gray-400">
-                            {(
-                              (si.data.unitPriceHT * si.data.tvaPercentage) /
-                              100
-                            ).toLocaleString("fr-FR")}{" "}
-                            DZD
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center text-gray-600">
-                      {si.data ? (si.data.quantityOffered ?? "—") : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-center font-semibold text-gray-900">
-                      {si.data
-                        ? `${si.data.totalHT.toLocaleString("fr-FR")} DZD`
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {si.data ? (
-                        si.data.isTechnicallyCompliant ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Conforme
-                          </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-500 font-medium">
-                            <XCircle className="w-3.5 h-3.5" /> Non conforme
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center font-mono text-gray-700">
+                        {si.data
+                          ? `${si.data.unitPriceHT.toLocaleString("fr-FR")} DZD`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {si.data ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="font-mono text-sm text-gray-700">
+                              {si.data.tvaPercentage.toFixed(0)}%
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              {(
+                                (si.data.unitPriceHT * si.data.tvaPercentage) /
+                                100
+                              ).toLocaleString("fr-FR")}{" "}
+                              DZD
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center text-gray-600">
+                        {si.data ? (si.data.quantityOffered ?? "—") : "—"}
+                      </td>
+                      <td className="px-3 py-3 text-center font-semibold text-gray-900">
+                        {si.data
+                          ? `${si.data.totalHT.toLocaleString("fr-FR")} DZD`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {si.data ? (
+                          si.data.isTechnicallyCompliant ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Conforme
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-red-500 font-medium">
+                              <XCircle className="w-3.5 h-3.5" /> Non conforme
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {si.data && onSelectSupplier && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectSupplier(
+                                isSelected ? null : si.supplierId,
+                              );
+                            }}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                              isSelected
+                                ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
+                          >
+                            {isSelected ? "Sélectionné" : "Sélectionner"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -676,6 +791,8 @@ function CollapsibleItemRow({
                 key={si.supplierId}
                 si={si}
                 minConformity={item.minConformityPercentage}
+                isSelected={userSelection?.supplierId === si.supplierId}
+                onSelectSupplier={onSelectSupplier}
               />
             ))}
           </div>
@@ -703,74 +820,6 @@ function CollapsibleItemRow({
           )}
 
           {/* Technical Details */}
-          {supplierItems.some((si) => si.data?.analysisDetails?.length > 0) && (
-            <div className="mt-4">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                Détails techniques par fournisseur
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {supplierItems.map((si) => {
-                  if (!si.data?.analysisDetails?.length) return null;
-                  return (
-                    <div
-                      key={si.supplierId}
-                      className="bg-gray-50 rounded-lg border border-gray-200 p-3"
-                    >
-                      <div className="font-medium text-sm text-gray-800 mb-2 flex items-center gap-2">
-                        {si.supplierName}
-                        <span
-                          className={`text-xs px-1.5 py-0.5 rounded ${
-                            (si.data.conformityPercentage || 0) >=
-                            item.minConformityPercentage
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {(si.data.conformityPercentage || 0).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {si.data.analysisDetails.map((detail, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between text-xs"
-                          >
-                            <span className="text-gray-600 truncate max-w-50">
-                              {detail.requirementLabel}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              {detail.matched ? (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              ) : (
-                                <XCircle className="w-3.5 h-3.5 text-red-400" />
-                              )}
-                              <span
-                                className={`font-medium w-6 text-right ${
-                                  detail.matched
-                                    ? "text-emerald-600"
-                                    : "text-red-500"
-                                }`}
-                              >
-                                {detail.score}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      {si.data.aiSummary && (
-                        <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500 italic">
-                          <span className="font-semibold text-indigo-600 not-italic flex items-center gap-1 mb-1">
-                            <BrainCircuit className="w-3 h-3" /> Analyse IA :
-                          </span>
-                          {si.data.aiSummary}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -784,9 +833,13 @@ function CollapsibleItemRow({
 function SupplierItemCard({
   si,
   minConformity,
+  isSelected,
+  onSelectSupplier,
 }: {
-  si: { supplierName: string; data?: SupplierItemAnalysis };
+  si: { supplierName: string; data?: SupplierItemAnalysis; supplierId: string };
   minConformity: number;
+  isSelected?: boolean;
+  onSelectSupplier?: (supplierId: string | null) => void;
 }) {
   if (!si.data) {
     return (
@@ -802,15 +855,20 @@ function SupplierItemCard({
   return (
     <div
       className={`bg-white rounded-lg border p-3 ${
-        (si.data.conformityPercentage || 0) >= minConformity
-          ? "border-gray-200"
-          : "border-red-200 bg-red-50/30"
+        isSelected
+          ? "border-indigo-300 bg-indigo-50/30"
+          : (si.data.conformityPercentage || 0) >= minConformity
+            ? "border-gray-200"
+            : "border-red-200 bg-red-50/30"
       }`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="font-medium text-sm text-gray-900">
-          {si.supplierName}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm text-gray-900">
+            {si.supplierName}
+          </span>
+          {isSelected && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
+        </div>
         <span
           className={`text-xs font-bold px-2 py-0.5 rounded-full ${
             (si.data.conformityPercentage || 0) >= minConformity
@@ -868,6 +926,23 @@ function SupplierItemCard({
           >
             {si.data.isTechnicallyCompliant ? "Conforme" : "Non conforme"}
           </div>
+        </div>
+        <div>
+          <div className="text-gray-400">Sélection</div>
+          {onSelectSupplier && (
+            <button
+              onClick={() =>
+                onSelectSupplier(isSelected ? null : si.supplierId)
+              }
+              className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
+                isSelected
+                  ? "bg-indigo-100 text-indigo-700"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {isSelected ? "Sélectionné" : "Sélectionner"}
+            </button>
+          )}
         </div>
       </div>
     </div>
