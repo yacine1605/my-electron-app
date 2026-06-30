@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Search, Plus, Building2, Users, Clock, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,7 @@ function OfferCard({
   const editPath = isAdmin
     ? `/admin/offers/${offer.id}/edit`
     : `/offer/liste/${offer.id}/edit`;
+  const navigate = useNavigate(); // ⬅️ add this import
 
   return (
     <div
