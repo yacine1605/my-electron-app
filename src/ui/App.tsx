@@ -181,8 +181,9 @@ function App() {
               <Route path="products" element={<ProductsPage />} />
               <Route path="Documents" element={<DocumentsPage />} />
               <Route path="payments" element={<InvoicesPage />} />
-              <Route path="offers" element={<OffersLayoutAdmin />} />
-              <Route path="offers/:offerId/edit" element={<EditOfferPage />} />
+              <Route path="offers" element={<OffersLayoutAdmin />}>
+                <Route path=":offerId/edit" element={<EditOfferPage />} />
+              </Route>
               <Route path="distributors" element={<DistributorsPage />} />
               <Route path="stats" element={<div>Statistiques</div>} />
               <Route path="user" element={<AccountProfilPage />} />
