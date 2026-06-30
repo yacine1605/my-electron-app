@@ -108,7 +108,7 @@ function AttachmentCard({
   attachment: OfferDetail["offerAttachments"][number];
 }) {
   const downloadUrl = attachment.filePath
-    ? `https://api.digitservz.dz${attachment.filePath}`
+    ? `https://api.digitservz.dz/uploads/${attachment.filePath.split("/").pop()}`
     : null;
 
   const getFileIcon = (mimeType: string | null) => {
