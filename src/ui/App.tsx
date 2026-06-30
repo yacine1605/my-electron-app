@@ -40,6 +40,7 @@ import DocumentFoldersListPage from "@/electron/components/modoleC/DocumentFolde
 import OfferExportsPage from "@/electron/components/Bpu/offers/OfferExportsPage";
 import OfferDocumentsLibrary from "@/electron/components/Bpu/offers/OfferDocumentsLibrary";
 import DocumentSignatureVerifier from "@/electron/components/Bpu/offers/DocumentSignatureVerifier";
+import EditOfferPage from "@/electron/components/Bpu/offers/EditOfferPage";
 
 const DistributorDashboard = () => <div>Distributor Dashboard</div>;
 const DistributorPortal = () => <div>Distributor Portal</div>;
@@ -181,6 +182,7 @@ function App() {
               <Route path="Documents" element={<DocumentsPage />} />
               <Route path="payments" element={<InvoicesPage />} />
               <Route path="offers" element={<OffersLayoutAdmin />} />
+              <Route path="offers/:offerId/edit" element={<EditOfferPage />} />
               <Route path="distributors" element={<DistributorsPage />} />
               <Route path="stats" element={<div>Statistiques</div>} />
               <Route path="user" element={<AccountProfilPage />} />
