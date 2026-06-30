@@ -5,7 +5,7 @@ export const API_BASE_URL = "https://api.digitservz.dz";
 
 export const apiClient = ky.create({
   prefix: `${API_BASE_URL}/api/`, // ✅ correct in ky v2
-  timeout: 15000,
+  timeout: 120000,
   retry: 0,
   hooks: {
     beforeRequest: [

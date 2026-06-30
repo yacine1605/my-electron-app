@@ -39,7 +39,26 @@ type ExtractedTenderLot = {
   detailQuantitatifPages?: number[] | null;
   excelBase64?: string | null;
   excelFileName?: string | null;
+  technicalDocuments?: {
+    hasTechnicalSheet?: boolean | null;
+    hasConformityCertificate?: boolean | null;
+    hasOriginCertificate?: boolean | null;
+    hasManufacturingCertificate?: boolean | null;
+    hasCatalog?: boolean | null;
+    hasUserManual?: boolean | null;
+    hasSample?: boolean | null;
+  } | null;
+  clientRequirements?: {
+    particularPrescriptions?: string | null;
+    warrantyDuration?: string | null;
+    deliveryDelay?: string | null;
+    savDuration?: string | null;
+    interventionDelay?: string | null;
+    savLocations?: string | null;
+    trainingDuration?: string | null;
+  } | null;
 };
+
 type ExtractedTender = {
   title?: string | null;
   tenderNumber?: string | null;
@@ -49,11 +68,29 @@ type ExtractedTender = {
   direction?: string | null;
   email?: string | null;
   wilaya?: string | null;
+  city?: string | null;
   address?: string | null;
   phone?: string | null;
+  phone2?: string | null;
+  contactPerson?: string | null;
+  serviceToContact?: string | null;
   year?: string | null;
   procedureType?: "appel_offre" | "consultation" | null;
   depositLocation?: string | null;
+  hospitalDepositDate?: string | null;
+  technicalDepartmentDepositDate?: string | null;
+  maintenanceWorkshop?: string | null;
+  availableTechnicalMeans?: string | null;
+  offerExpirationDate?: string | null;
+  ddpConditions?: string | null;
+  siteVisitPV?: boolean | null;
+  pliOpeningPV?: boolean | null;
+  provisionalAttributionPV?: boolean | null;
+  definitiveAttributionPV?: boolean | null;
+  justiceFolder?: boolean | null;
+  submissionBond?: boolean | null;
+  goodExecutionBond?: boolean | null;
+  supplierCommercialAudit?: string | null;
   lots?: ExtractedTenderLot[];
 };
 
@@ -631,7 +668,6 @@ function ServiceToContactSelect({
   value: string;
   onChange: (val: string) => void;
 }) {
-  // Les 3 services du tableau "Services à contacter" du formulaire papier
   const SERVICES = [
     { id: "pharmacie", name: "Service Pharmacie" },
     { id: "marches", name: "Bureau des Marchés" },
@@ -863,7 +899,6 @@ export default function MedicalEntityEmailWizard({
       return;
     }
 
-    // Limite absolue : 500MB (le serveur gère le reste)
     if (file.size > 500 * 1024 * 1024) {
       showToast("PDF trop volumineux (>500MB). Impossible de traiter.", "err");
       return;
@@ -876,7 +911,6 @@ export default function MedicalEntityEmailWizard({
     let pollInterval: NodeJS.Timeout | null = null;
 
     try {
-      // ── Étape 1 : Upload du PDF ──
       const formData = new FormData();
       formData.append("file", file);
 
@@ -896,10 +930,9 @@ export default function MedicalEntityEmailWizard({
       const { jobId } = uploadJson.data;
       console.log(`[PDF] Job created: ${jobId}`);
 
-      // ── Étape 2 : Polling du statut ──
       const result = await new Promise<any>((resolve, reject) => {
         let attempts = 0;
-        const MAX_ATTEMPTS = 300; // 25 minutes max (poll every 5s)
+        const MAX_ATTEMPTS = 300;
 
         pollInterval = setInterval(async () => {
           attempts++;
@@ -926,13 +959,12 @@ export default function MedicalEntityEmailWizard({
                 reject(new Error("Job expiré ou non trouvé."));
                 return;
               }
-              return; // Retry next poll
+              return;
             }
 
             const statusJson = await statusRes.json();
             const { status, progress, result, error } = statusJson.data;
 
-            // Mise à jour de l'UI
             setPdfJobStatus(status);
             setPdfJobProgress(progress || 0);
 
@@ -953,10 +985,9 @@ export default function MedicalEntityEmailWizard({
           } catch (pollError) {
             console.warn("[PDF Poll] Network error, retrying...", pollError);
           }
-        }, 5000); // Poll toutes les 5 secondes
+        }, 5000);
       });
 
-      // ── Traiter le résultat ──
       const extracted: ExtractedDocument = result;
 
       if (
@@ -1012,35 +1043,72 @@ export default function MedicalEntityEmailWizard({
           type: "quantitative_estimate" as AttachmentType,
         }));
 
+      // Mapper les lots avec les documents techniques et exigences extraites
+      const mappedLots: LotWithDetails[] = lots.map((l) => ({
+        number: l.number,
+        object: l.object,
+        technicalDocuments: l.technicalDocuments
+          ? {
+              hasTechnicalSheet:
+                l.technicalDocuments.hasTechnicalSheet ?? false,
+              hasConformityCertificate:
+                l.technicalDocuments.hasConformityCertificate ?? false,
+              hasOriginCertificate:
+                l.technicalDocuments.hasOriginCertificate ?? false,
+              hasManufacturingCertificate:
+                l.technicalDocuments.hasManufacturingCertificate ?? false,
+              hasCatalog: l.technicalDocuments.hasCatalog ?? false,
+              hasUserManual: l.technicalDocuments.hasUserManual ?? false,
+              hasSample: l.technicalDocuments.hasSample ?? false,
+            }
+          : { ...defaultTechnicalDocuments },
+        clientRequirements: l.clientRequirements
+          ? {
+              particularPrescriptions:
+                l.clientRequirements.particularPrescriptions ?? "",
+              warrantyDuration: l.clientRequirements.warrantyDuration ?? "",
+              deliveryDelay: l.clientRequirements.deliveryDelay ?? "",
+              savDuration: l.clientRequirements.savDuration ?? "",
+              interventionDelay: l.clientRequirements.interventionDelay ?? "",
+              savLocations: l.clientRequirements.savLocations ?? "",
+              trainingDuration: l.clientRequirements.trainingDuration ?? "",
+            }
+          : { ...defaultClientRequirements },
+        excelBase64: l.excelBase64,
+        excelFileName: l.excelFileName,
+      }));
+
       setData((prev) => ({
         ...prev,
         offerTitle: tender?.title || prev.offerTitle,
         consultationNumber: tender?.tenderNumber || prev.consultationNumber,
         procedureType: tender?.procedureType || prev.procedureType,
         depositLocation: tender?.depositLocation || prev.depositLocation,
-        ...(lots.length > 0
-          ? syncPrimaryLot(
-              lots.map((l) => ({
-                number: l.number,
-                object: l.object,
-                technicalDocuments: { ...defaultTechnicalDocuments },
-                clientRequirements: { ...defaultClientRequirements },
-                excelBase64: l.excelBase64,
-                excelFileName: l.excelFileName,
-              })),
-            )
-          : {}),
-        lots:
-          lots.length > 0
-            ? lots.map((l) => ({
-                number: l.number,
-                object: l.object,
-                technicalDocuments: { ...defaultTechnicalDocuments },
-                clientRequirements: { ...defaultClientRequirements },
-                excelBase64: l.excelBase64,
-                excelFileName: l.excelFileName,
-              }))
-            : prev.lots,
+        hospitalDepositDate:
+          tender?.hospitalDepositDate || prev.hospitalDepositDate,
+        technicalDepartmentDepositDate:
+          tender?.technicalDepartmentDepositDate ||
+          prev.technicalDepartmentDepositDate,
+        maintenanceWorkshop:
+          tender?.maintenanceWorkshop || prev.maintenanceWorkshop,
+        availableTechnicalMeans:
+          tender?.availableTechnicalMeans || prev.availableTechnicalMeans,
+        offerExpirationDate:
+          tender?.offerExpirationDate || prev.offerExpirationDate,
+        ddpConditions: tender?.ddpConditions || prev.ddpConditions,
+        siteVisitPV: tender?.siteVisitPV ?? prev.siteVisitPV,
+        pliOpeningPV: tender?.pliOpeningPV ?? prev.pliOpeningPV,
+        provisionalAttributionPV:
+          tender?.provisionalAttributionPV ?? prev.provisionalAttributionPV,
+        definitiveAttributionPV:
+          tender?.definitiveAttributionPV ?? prev.definitiveAttributionPV,
+        justiceFolder: tender?.justiceFolder ?? prev.justiceFolder,
+        submissionBond: tender?.submissionBond ?? prev.submissionBond,
+        goodExecutionBond: tender?.goodExecutionBond ?? prev.goodExecutionBond,
+        supplierCommercialAudit:
+          tender?.supplierCommercialAudit || prev.supplierCommercialAudit,
+        ...(lots.length > 0 ? syncPrimaryLot(mappedLots) : {}),
+        lots: lots.length > 0 ? mappedLots : prev.lots,
         attachments: (() => {
           if (lotAttachments.length === 0) return prev.attachments;
           const existingNames = new Set(
@@ -1058,15 +1126,23 @@ export default function MedicalEntityEmailWizard({
             tender?.type_organization ||
             detectEntityType(tender?.name_organization) ||
             prev.medicalEntity.type,
-          city: tender?.wilaya || prev.medicalEntity.city,
-          address: buildAddress(tender) || prev.medicalEntity.address,
+          city: tender?.city || tender?.wilaya || prev.medicalEntity.city,
+          address:
+            tender?.address ||
+            buildAddress(tender) ||
+            prev.medicalEntity.address,
           phone: tender?.phone || prev.medicalEntity.phone,
+          phone2: tender?.phone2 || prev.medicalEntity.phone2,
           email: tender?.email || prev.medicalEntity.email,
           contactPerson:
+            tender?.contactPerson ||
             extractContactPerson(tender?.name_organization) ||
             prev.medicalEntity.contactPerson,
           serviceToContact:
-            tender?.direction || prev.medicalEntity.serviceToContact,
+            tender?.serviceToContact ||
+            tender?.direction ||
+            tender?.ministry ||
+            prev.medicalEntity.serviceToContact,
         },
         wilaya: tender?.wilaya || prev.wilaya,
         establishment: tender?.name_organization || prev.establishment,
@@ -1098,6 +1174,7 @@ export default function MedicalEntityEmailWizard({
   function detectEntityType(text?: string | null): string {
     if (!text) return "";
     const value = text.toLowerCase();
+    // Français
     if (value.includes("clinique")) return "Clinique";
     if (value.includes("hopital") || value.includes("hôpital"))
       return "Hôpital";
@@ -1105,6 +1182,12 @@ export default function MedicalEntityEmailWizard({
     if (value.includes("universite") || value.includes("université"))
       return "Université";
     if (value.includes("laboratoire")) return "Laboratoire";
+    // Arabe
+    if (value.includes("مستشفى") || value.includes("مصح")) return "Hôpital";
+    if (value.includes("عيادة")) return "Clinique";
+    if (value.includes("جامعة")) return "Université";
+    if (value.includes("مختبر")) return "Laboratoire";
+    if (value.includes("صيدلية")) return "Pharmacie";
     return "";
   }
 
@@ -1123,10 +1206,37 @@ export default function MedicalEntityEmailWizard({
       "Béchar",
       "Ghardaïa",
       "Ouargla",
+      "الجزائر",
+      "وهران",
+      "البليدة",
+      "قسنطينة",
+      "عنابة",
+      "باتنة",
+      "سطيف",
+      "تلمسان",
+      "تيزي وزو",
+      "بشار",
+      "غرداية",
+      "ورقلة",
     ];
     const normalized = address.toLowerCase();
     for (const city of cities) {
-      if (normalized.includes(city.toLowerCase())) return city;
+      if (normalized.includes(city.toLowerCase())) {
+        // Normaliser les noms arabes vers français
+        if (city === "الجزائر") return "Alger";
+        if (city === "وهران") return "Oran";
+        if (city === "البليدة") return "Blida";
+        if (city === "قسنطينة") return "Constantine";
+        if (city === "عنابة") return "Annaba";
+        if (city === "باتنة") return "Batna";
+        if (city === "سطيف") return "Sétif";
+        if (city === "تلمسان") return "Tlemcen";
+        if (city === "تيزي وزو") return "Tizi Ouzou";
+        if (city === "بشار") return "Béchar";
+        if (city === "غرداية") return "Ghardaïa";
+        if (city === "ورقلة") return "Ouargla";
+        return city;
+      }
     }
     return "";
   }
@@ -2083,7 +2193,6 @@ export default function MedicalEntityEmailWizard({
                   </div>
                 </div>
 
-                {/* Mini Excel Preview / Download */}
                 {lot.excelBase64 && (
                   <LotExcelPreview
                     base64={lot.excelBase64}
@@ -2466,12 +2575,53 @@ export default function MedicalEntityEmailWizard({
                 "Date dépôt service technique",
                 data.technicalDepartmentDepositDate || "—",
               ],
+              ["Date expiration", data.offerExpirationDate || "—"],
+              ["Atelier maintenance", data.maintenanceWorkshop || "—"],
+              ["Moyens techniques", data.availableTechnicalMeans || "—"],
+              ["Conditions DDP", data.ddpConditions || "—"],
             ].map(([label, val]) => (
               <p key={label as string} className="text-gray-600">
                 <span className="font-medium text-gray-800">{label} :</span>{" "}
                 {val}
               </p>
             ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {data.siteVisitPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Visite Site
+              </span>
+            )}
+            {data.pliOpeningPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Ouverture Plis
+              </span>
+            )}
+            {data.provisionalAttributionPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Attribution Provisoire
+              </span>
+            )}
+            {data.definitiveAttributionPV && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                PV Attribution Définitive
+              </span>
+            )}
+            {data.justiceFolder && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                Dossier Justice
+              </span>
+            )}
+            {data.submissionBond && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                Caution Soumission
+              </span>
+            )}
+            {data.goodExecutionBond && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                Caution Bonne Exécution
+              </span>
+            )}
           </div>
         </section>
 
@@ -2503,7 +2653,6 @@ export default function MedicalEntityEmailWizard({
                 )}
               </h4>
 
-              {/* Documents Technique */}
               <div className="mb-2">
                 <p className="text-xs font-medium text-gray-700 mb-1">
                   Documents Technique :
@@ -2547,7 +2696,6 @@ export default function MedicalEntityEmailWizard({
                 </div>
               </div>
 
-              {/* Exigences du Client */}
               <div className="grid grid-cols-1 gap-1 text-xs md:grid-cols-2">
                 {[
                   [
@@ -2585,7 +2733,6 @@ export default function MedicalEntityEmailWizard({
             </div>
           ))}
 
-          {/* Informations Commerciales */}
           <div className="mt-3 grid grid-cols-1 gap-1.5 text-xs md:grid-cols-2">
             {[
               ["Atelier de Maintenance", data.maintenanceWorkshop || "—"],
@@ -2602,45 +2749,6 @@ export default function MedicalEntityEmailWizard({
                 {val}
               </p>
             ))}
-          </div>
-
-          {/* Suivi du Dossier */}
-          <div className="mt-3 flex flex-wrap gap-1">
-            {data.siteVisitPV && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                PV Visite Site
-              </span>
-            )}
-            {data.pliOpeningPV && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                PV Ouverture Plis
-              </span>
-            )}
-            {data.provisionalAttributionPV && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                PV Attribution Provisoire
-              </span>
-            )}
-            {data.definitiveAttributionPV && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                PV Attribution Définitive
-              </span>
-            )}
-            {data.justiceFolder && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                Dossier Justice
-              </span>
-            )}
-            {data.submissionBond && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                Caution Soumission
-              </span>
-            )}
-            {data.goodExecutionBond && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
-                Caution Bonne Exécution
-              </span>
-            )}
           </div>
         </section>
 

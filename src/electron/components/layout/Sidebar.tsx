@@ -24,12 +24,6 @@ const navItems: NavItem[] = [
     path: "/",
     group: "Général",
   },
-  // {
-  //   label: "Creation Des offres",
-  //   icon: <GitCompare className="w-5 h-5" />,
-  //   path: "/offers/new",
-  //   group: "Offres",
-  // },
 
   {
     label: "Liste de Offres",
@@ -41,6 +35,12 @@ const navItems: NavItem[] = [
     label: "Sous-Dossier",
     icon: <Building2 className="w-5 h-5" />,
     path: "/offers/document-folders",
+    group: "Gestion",
+  },
+  {
+    label: "Importer des fichiers",
+    icon: <Building2 className="w-5 h-5" />,
+    path: "/offers/import-files",
     group: "Gestion",
   },
   {
@@ -61,36 +61,13 @@ const navItems: NavItem[] = [
     path: "/products",
     group: "Gestion",
   },
-  // {
-  //   label: "Factures",
-  //   icon: <Receipt className="w-5 h-5" />,
-  //   path: "/accounting/invoices",
-  //   group: "Comptabilité",
-  // },
-  // {
-  //   label: "Paiements",
-  //   icon: <CreditCard className="w-5 h-5" />,
-  //   path: "/accounting/payments",
-  //   group: "Comptabilité",
-  // },
-  // {
-  //   label: "Statistiques",
-  //   icon: <BarChart3 className="w-5 h-5" />,
-  //   path: "/accounting/stats",
-  //   group: "Comptabilité",
-  // },
+
   {
     label: "Utilisateurs",
     icon: <Users className="w-5 h-5" />,
     path: "/user",
     group: "Paramètres",
   },
-  // {
-  //   label: "Paramètres",
-  //   icon: <Settings className="w-5 h-5" />,
-  //   path: "/settings",
-  //   group: "Paramètres",
-  // },
 ];
 
 export function Sidebar() {

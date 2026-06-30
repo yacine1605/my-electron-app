@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { API_BASE_URL, apiClient } from "./apiClient";
+import { API_BASE_URL, apiClient, getAuthHeaders } from "./apiClient";
+import ky from "ky";
 
 export interface OfferItem {
   id: string;
@@ -229,16 +230,14 @@ export function useOfferComparison(offerId: string | undefined) {
     if (!offerId) return;
 
     safeSet(setExporting, true);
+    safeSet(setError, null);
 
     try {
       const json = await apiClient
         .post(`offers/${offerId}/export`, { timeout: false })
         .json<{
           success: boolean;
-          data: {
-            fileUrl: string;
-            fileName: string;
-          };
+          data: { fileUrl: string; fileName: string };
           message?: string;
         }>();
 
@@ -247,7 +246,22 @@ export function useOfferComparison(offerId: string | undefined) {
           ? json.data.fileUrl
           : `${API_BASE_URL}${json.data.fileUrl}`;
 
-        window.open(downloadUrl, "_blank", "noopener,noreferrer");
+        // Use raw ky for absolute URLs to avoid prefix duplication
+        const response = await ky.get(downloadUrl, {
+          headers: getAuthHeaders(),
+          timeout: false,
+        });
+
+        const blob = await response.blob();
+
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = json.data.fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
       } else {
         safeSet(setError, json.message ?? "Erreur lors de l'export");
       }
@@ -257,7 +271,6 @@ export function useOfferComparison(offerId: string | undefined) {
       safeSet(setExporting, false);
     }
   }, [offerId, safeSet]);
-
   const refreshMissingItems = useCallback(async () => {
     if (!offerId) return;
     try {

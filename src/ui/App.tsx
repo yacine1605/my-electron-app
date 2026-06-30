@@ -38,6 +38,8 @@ import DocumentsPage from "@/electron/components/Admin/Documents";
 import OfferDocumentsPage from "@/electron/components/Bpu/offers/OfferDocumentsPage";
 import DocumentFoldersListPage from "@/electron/components/modoleC/DocumentFoldersListPage";
 import OfferExportsPage from "@/electron/components/Bpu/offers/OfferExportsPage";
+import OfferDocumentsLibrary from "@/electron/components/Bpu/offers/OfferDocumentsLibrary";
+import DocumentSignatureVerifier from "@/electron/components/Bpu/offers/DocumentSignatureVerifier";
 
 const DistributorDashboard = () => <div>Distributor Dashboard</div>;
 const DistributorPortal = () => <div>Distributor Portal</div>;
@@ -113,6 +115,11 @@ function App() {
                 path="/offers/document-folders"
                 element={<DocumentFoldersListPage />}
               />
+              <Route
+                path="/offers/import-files"
+                element={<OfferDocumentsLibrary />}
+              />
+              ;
               <Route path="/offer/liste" element={<OffersLayout />}>
                 <Route index element={<EmptyOfferState />} />
                 <Route path=":offerId" element={<OfferDetailsPage />} />
@@ -152,6 +159,10 @@ function App() {
               <Route path="dashboard" element={<DashboardTechiniquePage />} />
               <Route path="offers/new" element={<MedicalEntityEmailWizard />} />
               <Route path="user" element={<AccountProfilPage />} />
+              <Route
+                path="files/verification"
+                element={<DocumentSignatureVerifier />}
+              />
               <Route path="offers/exports" element={<OfferExportsPage />} />
               <Route path="offer/liste" element={<OffersLayout />}>
                 <Route index element={<EmptyOfferState />} />

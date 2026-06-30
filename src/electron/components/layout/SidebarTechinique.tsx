@@ -35,6 +35,12 @@ const navItems: NavItem[] = [
     path: "offers/exports",
     group: "Offres",
   },
+  {
+    label: "Verification Des fichiers",
+    icon: <GitCompare className="w-5 h-5" />,
+    path: "files/verification",
+    group: "Fichiers",
+  },
 
   {
     label: "Utilisateurs",

@@ -1,3 +1,7 @@
+// adjust path if your apiClient lives elsewhere
+
+import { apiClient } from "../apiClient";
+
 /**
  * API service layer - FK PHARM Medical Procurement System
  * Matches all backend endpoints exactly
@@ -502,4 +506,116 @@ export async function runFullPipeline(
     throw new Error(res.error || "Pipeline failed");
   }
   return res.data;
+}
+
+/* ───────────────────────────────────────────
+   LIBRARY DOCUMENTS (ky / apiClient)
+   ─────────────────────────────────────────── */
+
+export type DocumentCategory = "legal" | "tax" | "commercial";
+
+export interface LibraryDocument {
+  id: string;
+  offerId: string;
+  category: DocumentCategory;
+  docType: string;
+  originalFileName: string;
+  storedFileName: string;
+  filePath: string;
+  mimeType: string | null;
+  fileSize: number | null;
+  createdAt: string;
+}
+
+export interface OfferOption {
+  id: string;
+  title: string;
+}
+
+export async function fetchOffers(): Promise<OfferOption[]> {
+  const res = await apiClient.get("offers").json<ApiResponse<any[]>>();
+  if (!res.success || !res.data) {
+    throw new Error(res.error || "Erreur chargement des offres.");
+  }
+  return res.data.map((item: any) => ({
+    id: item.id,
+    title: item.title || item.emailSubject || "Offre sans titre",
+  }));
+}
+
+export async function fetchLibraryDocuments(
+  offerId: string,
+): Promise<LibraryDocument[]> {
+  const res = await apiClient
+    .get(`offers/${offerId}/library-documents`)
+    .json<ApiResponse<LibraryDocument[]>>();
+  if (!res.success || !res.data) {
+    throw new Error(res.error || "Erreur chargement des documents.");
+  }
+  return res.data;
+}
+
+export async function uploadLibraryDocuments(
+  offerId: string,
+  formData: FormData,
+): Promise<void> {
+  const res = await apiClient
+    .post(`offers/${offerId}/library-documents`, {
+      body: formData,
+    })
+    .json<ApiResponse<unknown>>();
+  if (!res.success) {
+    throw new Error(res.error || "Import impossible.");
+  }
+}
+
+export async function deleteLibraryDocument(
+  offerId: string,
+  documentId: string,
+): Promise<void> {
+  const res = await apiClient
+    .delete(`offers/${offerId}/library-documents/${documentId}`)
+    .json<ApiResponse<unknown>>();
+  if (!res.success) {
+    throw new Error(res.error || "Suppression impossible.");
+  }
+}
+
+export async function downloadLibraryDocument(
+  offerId: string,
+  documentId: string,
+  filename: string,
+): Promise<void> {
+  const blob = await apiClient
+    .get(`offers/${offerId}/library-documents/${documentId}/download`)
+    .blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+export async function exportLibraryDocumentsZip(
+  offerId: string,
+  categoryFilter?: DocumentCategory,
+): Promise<void> {
+  const suffix = categoryFilter ? `?category=${categoryFilter}` : "";
+  const filename = categoryFilter
+    ? `documents-${categoryFilter}-${offerId}.zip`
+    : `documents-offre-${offerId}.zip`;
+  const blob = await apiClient
+    .get(`offers/${offerId}/library-documents-export${suffix}`)
+    .blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
 }
